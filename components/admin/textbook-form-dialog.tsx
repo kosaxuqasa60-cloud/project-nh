@@ -32,6 +32,7 @@ import {
 
 const CURRENT_YEAR = 2026
 const YEARS = Array.from({ length: 9 }, (_, i) => CURRENT_YEAR - i)
+const YEAR_ITEMS = Object.fromEntries(YEARS.map((y) => [String(y), `${y} 年`]))
 
 export function TextbookFormDialog({ trigger }: { trigger: React.ReactNode }) {
   const { addTextbook } = useStore()
@@ -68,7 +69,7 @@ export function TextbookFormDialog({ trigger }: { trigger: React.ReactNode }) {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>{trigger}</DialogTrigger>
+      <DialogTrigger render={trigger as React.ReactElement} />
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>新建教材</DialogTitle>
@@ -110,7 +111,7 @@ export function TextbookFormDialog({ trigger }: { trigger: React.ReactNode }) {
               </Select>
             </Field>
             <Field label="学段">
-              <Select value={stage} onValueChange={(v) => setStage(v as Stage)}>
+              <Select value={stage} onValueChange={(v) => setStage(v as Stage)} items={STAGE_LABELS}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {(Object.keys(STAGE_LABELS) as Stage[]).map((s) => (
@@ -130,7 +131,7 @@ export function TextbookFormDialog({ trigger }: { trigger: React.ReactNode }) {
               </Select>
             </Field>
             <Field label="册次">
-              <Select value={volume} onValueChange={(v) => setVolume(v as Volume)}>
+              <Select value={volume} onValueChange={(v) => setVolume(v as Volume)} items={VOLUME_LABELS}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {(Object.keys(VOLUME_LABELS) as Volume[]).map((v) => (
@@ -140,7 +141,7 @@ export function TextbookFormDialog({ trigger }: { trigger: React.ReactNode }) {
               </Select>
             </Field>
             <Field label="教材年份">
-              <Select value={year} onValueChange={setYear}>
+              <Select value={year} onValueChange={setYear} items={YEAR_ITEMS}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {YEARS.map((y) => (

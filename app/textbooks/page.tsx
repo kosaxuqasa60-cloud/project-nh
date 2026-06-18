@@ -135,10 +135,12 @@ export default function TextbooksPage() {
                   <StatusBadge status={t.status} />
                 </TableCell>
                 <TableCell className="pr-5 text-right">
-                  <Button asChild variant="ghost" size="sm">
-                    <Link href={`/textbooks/${t.id}`}>
-                      配置目录 <ChevronRight className="size-4" />
-                    </Link>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    render={<Link href={`/textbooks/${t.id}`} />}
+                  >
+                    配置目录 <ChevronRight className="size-4" />
                   </Button>
                 </TableCell>
               </TableRow>
@@ -170,10 +172,14 @@ function FilterSelect({
   options: string[]
   render?: (v: string) => string
 }) {
+  const items = {
+    all: "全部",
+    ...Object.fromEntries(options.map((o) => [o, render ? render(o) : o])),
+  }
   return (
     <div className="flex items-center gap-2">
       <span className="text-xs font-medium text-muted-foreground">{label}</span>
-      <Select value={value} onValueChange={onChange}>
+      <Select value={value} onValueChange={onChange} items={items}>
         <SelectTrigger className="h-9 w-[130px]">
           <SelectValue />
         </SelectTrigger>

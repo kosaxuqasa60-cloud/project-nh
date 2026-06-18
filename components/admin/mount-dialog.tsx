@@ -37,6 +37,10 @@ export function MountDialog({
   const [pendingChapter, setPendingChapter] = useState("")
 
   const tbChapters = chapters.filter((c) => c.textbookId === pendingTb)
+  const tbItems = Object.fromEntries(
+    textbooks.map((t) => [t.id, `${t.version} · ${t.subject} ${t.grade}（${t.year}）`]),
+  )
+  const chapterItems = Object.fromEntries(tbChapters.map((c) => [c.id, c.title]))
 
   function addMount() {
     if (!pendingTb || !pendingChapter) {
@@ -63,7 +67,7 @@ export function MountDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>{trigger}</DialogTrigger>
+      <DialogTrigger render={trigger as React.ReactElement} />
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>挂载题目到教材章节</DialogTitle>
@@ -121,6 +125,7 @@ export function MountDialog({
             <label className="text-xs text-muted-foreground">选择教材</label>
             <Select
               value={pendingTb}
+              items={tbItems}
               onValueChange={(v) => {
                 setPendingTb(v)
                 setPendingChapter("")
@@ -138,7 +143,7 @@ export function MountDialog({
           </div>
           <div className="min-w-[180px] flex-1 space-y-1">
             <label className="text-xs text-muted-foreground">选择章节</label>
-            <Select value={pendingChapter} onValueChange={setPendingChapter} disabled={!pendingTb}>
+            <Select value={pendingChapter} onValueChange={setPendingChapter} items={chapterItems} disabled={!pendingTb}>
               <SelectTrigger><SelectValue placeholder="章节" /></SelectTrigger>
               <SelectContent>
                 {tbChapters.map((c) => (

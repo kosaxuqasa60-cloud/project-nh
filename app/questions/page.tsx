@@ -33,6 +33,14 @@ export default function QuestionsPage() {
       (tbFilter === ALL || q.mounts.some((m) => m.textbookId === tbFilter)),
   )
 
+  const typeItems = { all: "全部", ...QUESTION_TYPE_LABELS }
+  const tbFilterItems = {
+    all: "全部",
+    ...Object.fromEntries(
+      textbooks.map((t) => [t.id, `${t.version} · ${t.subject} ${t.grade}`]),
+    ),
+  }
+
   return (
     <div>
       <PageHeader
@@ -48,7 +56,7 @@ export default function QuestionsPage() {
       <Card className="mb-4 flex flex-wrap items-center gap-3 p-4">
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium text-muted-foreground">题型</span>
-          <Select value={type} onValueChange={setType}>
+          <Select value={type} onValueChange={setType} items={typeItems}>
             <SelectTrigger className="h-9 w-[130px]"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">全部</SelectItem>
@@ -60,7 +68,7 @@ export default function QuestionsPage() {
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium text-muted-foreground">挂载教材</span>
-          <Select value={tbFilter} onValueChange={setTbFilter}>
+          <Select value={tbFilter} onValueChange={setTbFilter} items={tbFilterItems}>
             <SelectTrigger className="h-9 w-[200px]"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">全部</SelectItem>

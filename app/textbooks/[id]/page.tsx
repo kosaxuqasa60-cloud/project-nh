@@ -22,8 +22,8 @@ export default function TextbookDetailPage() {
       <div className="py-20 text-center text-muted-foreground">
         未找到该教材。
         <div className="mt-4">
-          <Button asChild variant="outline">
-            <Link href="/textbooks">返回教材列表</Link>
+          <Button variant="outline" render={<Link href="/textbooks" />}>
+            返回教材列表
           </Button>
         </div>
       </div>
