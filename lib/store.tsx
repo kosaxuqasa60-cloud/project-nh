@@ -2,18 +2,24 @@
 
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react"
 import {
+  airClasses as seedAirClasses,
   assignments as seedAssignments,
   chapters as seedChapters,
   knowledgePoints as seedKnowledgePoints,
+  microlessons as seedMicrolessons,
   questions as seedQuestions,
   syncLinks as seedSyncLinks,
   textbooks as seedTextbooks,
 } from "./mock-data"
+import { QUESTION_TYPE_LABELS } from "./types"
 import type {
+  AirClass,
   Assignment,
   ChapterNode,
   ChapterSyncLink,
   KnowledgePoint,
+  Microlesson,
+  NormalizedResource,
   Question,
   SyncResourceType,
   Textbook,
@@ -24,6 +30,8 @@ interface StoreValue {
   chapters: ChapterNode[]
   questions: Question[]
   assignments: Assignment[]
+  microlessons: Microlesson[]
+  airClasses: AirClass[]
   knowledgePoints: KnowledgePoint[]
   syncLinks: ChapterSyncLink[]
   addTextbook: (tb: Omit<Textbook, "id" | "updatedAt">) => Textbook
@@ -34,12 +42,30 @@ interface StoreValue {
   // 知识点
   addKnowledgePoint: (kp: Omit<KnowledgePoint, "id">) => void
   setChapterKnowledgePoints: (chapterId: string, kpIds: string[]) => void
-  // 批量挂题：把一批题目挂入某教材的某章节
-  batchMountQuestions: (textbookId: string, chapterId: string, questionIds: string[]) => void
-  // 卸载某题在某章节的挂载
-  unmountQuestion: (questionId: string, textbookId: string, chapterId: string) => void
-  // 按知识点把题目自动归集到某章节（一键拉题）
-  autoCollectByKnowledgePoints: (textbookId: string, chapterId: string) => number
+  // 通用资源：按类型取归一化资源列表
+  resourcesByKind: (kind: SyncResourceType) => NormalizedResource[]
+  // 批量挂载：把一批资源挂入某教材的某章节
+  batchMountResources: (
+    kind: SyncResourceType,
+    textbookId: string,
+    chapterId: string,
+    ids: string[],
+  ) => void
+  // 卸载某资源在某章节的挂载
+  unmountResource: (
+    kind: SyncResourceType,
+    id: string,
+    textbookId: string,
+    chapterId: string,
+  ) => void
+  // 按知识点把资源自动归集到某章节（一键拉取）
+  autoCollectByKnowledgePoints: (
+    kind: SyncResourceType,
+    textbookId: string,
+    chapterId: string,
+  ) => number
+  // 某章节某类资源的数量
+  countResourcesByChapter: (chapterId: string, kind: SyncResourceType) => number
   // 教材同步关系：建立 / 更新同步资源 / 删除
   addSyncLink: (link: Omit<ChapterSyncLink, "id">) => void
   updateSyncLinkTypes: (id: string, syncTypes: SyncResourceType[]) => void
@@ -60,10 +86,33 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [textbooks, setTextbooks] = useState<Textbook[]>(seedTextbooks)
   const [chapters, setChapters] = useState<ChapterNode[]>(seedChapters)
   const [questions, setQuestions] = useState<Question[]>(seedQuestions)
-  const [assignments] = useState<Assignment[]>(seedAssignments)
+  const [assignments, setAssignments] = useState<Assignment[]>(seedAssignments)
+  const [microlessons, setMicrolessons] = useState<Microlesson[]>(seedMicrolessons)
+  const [airClasses, setAirClasses] = useState<AirClass[]>(seedAirClasses)
   const [knowledgePoints, setKnowledgePoints] =
     useState<KnowledgePoint[]>(seedKnowledgePoints)
   const [syncLinks, setSyncLinks] = useState<ChapterSyncLink[]>(seedSyncLinks)
+
+  // 四类资源共享的可挂载基础结构
+  type Mountable = {
+    id: string
+    knowledgePointIds: string[]
+    chapterMounts: { textbookId: string; chapterId: string }[]
+    updatedAt: string
+  }
+  // 按资源类型更新对应的状态数组
+  const updateByKind = (
+    kind: SyncResourceType,
+    mapper: (r: Mountable) => Mountable,
+  ) => {
+    if (kind === "question")
+      setQuestions((p) => p.map((r) => mapper(r) as Question))
+    else if (kind === "assignment")
+      setAssignments((p) => p.map((r) => mapper(r) as Assignment))
+    else if (kind === "microlesson")
+      setMicrolessons((p) => p.map((r) => mapper(r) as Microlesson))
+    else setAirClasses((p) => p.map((r) => mapper(r) as AirClass))
+  }
 
   const value = useMemo<StoreValue>(
     () => ({
@@ -71,6 +120,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       chapters,
       questions,
       assignments,
+      microlessons,
+      airClasses,
       knowledgePoints,
       syncLinks,
       addTextbook: (tb) => {
@@ -95,59 +146,105 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           prev.map((c) => (c.id === chapterId ? { ...c, knowledgePointIds: kpIds } : c)),
         ),
 
-      batchMountQuestions: (textbookId, chapterId, questionIds) =>
-        setQuestions((prev) =>
-          prev.map((q) => {
-            if (!questionIds.includes(q.id)) return q
-            const exists = q.chapterMounts.some(
-              (m) => m.textbookId === textbookId && m.chapterId === chapterId,
-            )
-            if (exists) return q
-            return {
-              ...q,
-              chapterMounts: [...q.chapterMounts, { textbookId, chapterId }],
-              updatedAt: today(),
-            }
-          }),
+      resourcesByKind: (kind) => {
+        if (kind === "question")
+          return questions.map<NormalizedResource>((q) => ({
+            id: q.id,
+            kind,
+            title: q.stem,
+            subtitle: QUESTION_TYPE_LABELS[q.type],
+            knowledgePointIds: q.knowledgePointIds,
+            chapterMounts: q.chapterMounts,
+          }))
+        if (kind === "assignment")
+          return assignments.map<NormalizedResource>((a) => ({
+            id: a.id,
+            kind,
+            title: a.title,
+            subtitle: `${a.questionIds.length} 道题`,
+            knowledgePointIds: a.knowledgePointIds,
+            chapterMounts: a.chapterMounts,
+          }))
+        if (kind === "microlesson")
+          return microlessons.map<NormalizedResource>((m) => ({
+            id: m.id,
+            kind,
+            title: m.title,
+            subtitle: m.duration,
+            knowledgePointIds: m.knowledgePointIds,
+            chapterMounts: m.chapterMounts,
+          }))
+        return airClasses.map<NormalizedResource>((a) => ({
+          id: a.id,
+          kind,
+          title: a.title,
+          subtitle: a.teacher,
+          knowledgePointIds: a.knowledgePointIds,
+          chapterMounts: a.chapterMounts,
+        }))
+      },
+
+      batchMountResources: (kind, textbookId, chapterId, ids) =>
+        updateByKind(kind, (r) => {
+          if (!ids.includes(r.id)) return r
+          const exists = r.chapterMounts.some(
+            (m) => m.textbookId === textbookId && m.chapterId === chapterId,
+          )
+          if (exists) return r
+          return {
+            ...r,
+            chapterMounts: [...r.chapterMounts, { textbookId, chapterId }],
+            updatedAt: today(),
+          }
+        }),
+
+      unmountResource: (kind, id, textbookId, chapterId) =>
+        updateByKind(kind, (r) =>
+          r.id === id
+            ? {
+                ...r,
+                chapterMounts: r.chapterMounts.filter(
+                  (m) => !(m.textbookId === textbookId && m.chapterId === chapterId),
+                ),
+                updatedAt: today(),
+              }
+            : r,
         ),
 
-      unmountQuestion: (questionId, textbookId, chapterId) =>
-        setQuestions((prev) =>
-          prev.map((q) =>
-            q.id === questionId
-              ? {
-                  ...q,
-                  chapterMounts: q.chapterMounts.filter(
-                    (m) => !(m.textbookId === textbookId && m.chapterId === chapterId),
-                  ),
-                  updatedAt: today(),
-                }
-              : q,
-          ),
-        ),
-
-      autoCollectByKnowledgePoints: (textbookId, chapterId) => {
+      autoCollectByKnowledgePoints: (kind, textbookId, chapterId) => {
         const chapter = chapters.find((c) => c.id === chapterId)
         if (!chapter || chapter.knowledgePointIds.length === 0) return 0
         const kpSet = new Set(chapter.knowledgePointIds)
         let count = 0
-        setQuestions((prev) =>
-          prev.map((q) => {
-            const matches = q.knowledgePointIds.some((id) => kpSet.has(id))
-            if (!matches) return q
-            const exists = q.chapterMounts.some(
-              (m) => m.textbookId === textbookId && m.chapterId === chapterId,
-            )
-            if (exists) return q
-            count++
-            return {
-              ...q,
-              chapterMounts: [...q.chapterMounts, { textbookId, chapterId }],
-              updatedAt: today(),
-            }
-          }),
-        )
+        updateByKind(kind, (r) => {
+          const matches = r.knowledgePointIds.some((id) => kpSet.has(id))
+          if (!matches) return r
+          const exists = r.chapterMounts.some(
+            (m) => m.textbookId === textbookId && m.chapterId === chapterId,
+          )
+          if (exists) return r
+          count++
+          return {
+            ...r,
+            chapterMounts: [...r.chapterMounts, { textbookId, chapterId }],
+            updatedAt: today(),
+          }
+        })
         return count
+      },
+
+      countResourcesByChapter: (chapterId, kind) => {
+        const list: Mountable[] =
+          kind === "question"
+            ? questions
+            : kind === "assignment"
+              ? assignments
+              : kind === "microlesson"
+                ? microlessons
+                : airClasses
+        return list.filter((r) =>
+          r.chapterMounts.some((m) => m.chapterId === chapterId),
+        ).length
       },
 
       addSyncLink: (link) =>
@@ -169,7 +266,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return questions.filter((q) => q.knowledgePointIds.some((id) => set.has(id)))
       },
     }),
-    [textbooks, chapters, questions, assignments, knowledgePoints, syncLinks],
+    [
+      textbooks,
+      chapters,
+      questions,
+      assignments,
+      microlessons,
+      airClasses,
+      knowledgePoints,
+      syncLinks,
+    ],
   )
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>

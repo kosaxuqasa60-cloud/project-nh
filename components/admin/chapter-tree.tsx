@@ -6,10 +6,13 @@ import {
   ChevronDown,
   ChevronRight,
   FileStack,
+  FileText,
   GripVertical,
   Layers,
   Plus,
+  Radio,
   Trash2,
+  Video,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -17,10 +20,17 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { BatchMountSheet } from "@/components/admin/batch-mount-sheet"
 import { useStore } from "@/lib/store"
-import type { ChapterNode } from "@/lib/types"
+import { SYNC_RESOURCE_LABELS, type ChapterNode, type SyncResourceType } from "@/lib/types"
+
+const RESOURCE_META: { kind: SyncResourceType; icon: typeof FileStack }[] = [
+  { kind: "question", icon: FileStack },
+  { kind: "assignment", icon: FileText },
+  { kind: "microlesson", icon: Video },
+  { kind: "airclass", icon: Radio },
+]
 
 export function ChapterTree({ textbookId }: { textbookId: string }) {
-  const { chapters, addChapter, updateChapter, removeChapter, countQuestionsByChapter } =
+  const { chapters, addChapter, updateChapter, removeChapter, countResourcesByChapter } =
     useStore()
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -71,7 +81,10 @@ export function ChapterTree({ textbookId }: { textbookId: string }) {
     const kids = childrenOf(node.id)
     const hasKids = kids.length > 0
     const isOpen = expanded[node.id] ?? true
-    const count = countQuestionsByChapter(node.id)
+    const counts = RESOURCE_META.map((r) => ({
+      ...r,
+      count: countResourcesByChapter(node.id, r.kind),
+    }))
     const kpCount = node.knowledgePointIds.length
 
     return (
@@ -124,20 +137,33 @@ export function ChapterTree({ textbookId }: { textbookId: string }) {
               {kpCount} 知识点
             </Badge>
           )}
-          <span className="ml-1.5 inline-flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-[11px] tabular-nums text-accent-foreground">
-            <FileStack className="size-3" />
-            {count}
-          </span>
+          <div className="ml-1.5 flex items-center gap-1">
+            {counts.map(({ kind, icon: Icon, count }) => (
+              <span
+                key={kind}
+                title={`${SYNC_RESOURCE_LABELS[kind]} ${count}`}
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] tabular-nums",
+                  count > 0
+                    ? "bg-accent text-accent-foreground"
+                    : "text-muted-foreground/40",
+                )}
+              >
+                <Icon className="size-3" />
+                {count}
+              </span>
+            ))}
+          </div>
 
           <div className="ml-auto flex items-center gap-0.5">
             <Button
               variant="ghost"
               size="sm"
               className="h-7 gap-1 px-2 text-xs text-primary opacity-0 hover:text-primary group-hover:opacity-100"
-              title="批量挂题"
+              title="批量挂载资源"
               onClick={() => openMount(node.id)}
             >
-              <Layers className="size-3.5" /> 批量挂题
+              <Layers className="size-3.5" /> 批量挂载
             </Button>
             <Button
               variant="ghost"
@@ -171,7 +197,7 @@ export function ChapterTree({ textbookId }: { textbookId: string }) {
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          点击节点名称可重命名。悬停节点点「批量挂题」按知识点一键归集或勾选挂入，无需逐题操作。
+          点击节点名称可重命名。悬停节点点「批量挂载」，可按知识点一键归集或勾选挂入题目 / 作业 / 微课 / 空中课堂。
         </p>
         <Button variant="outline" size="sm" onClick={addRoot}>
           <Plus className="size-4" /> 新增章

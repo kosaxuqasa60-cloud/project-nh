@@ -1,8 +1,10 @@
 import type {
+  AirClass,
   Assignment,
   ChapterNode,
   ChapterSyncLink,
   KnowledgePoint,
+  Microlesson,
   Question,
   Textbook,
 } from "./types"
@@ -176,7 +178,7 @@ export const questions: Question[] = [
   },
   {
     id: "q-6",
-    stem: "在数轴上，表示 −2 的点到原点的距离是 ______。",
+    stem: "在数轴上，表示 −2 的点到原��的距离是 ______。",
     type: "fill",
     subject: "数学",
     difficulty: 1,
@@ -264,6 +266,8 @@ export const assignments: Assignment[] = [
     subject: "数学",
     questionIds: ["q-1", "q-2", "q-3"],
     textbookIds: ["tb-1", "tb-2"],
+    knowledgePointIds: ["kp-1", "kp-2"],
+    chapterMounts: [{ textbookId: "tb-1", chapterId: "ch-1-1" }],
     status: "published",
     updatedAt: "2026-05-22",
   },
@@ -273,7 +277,73 @@ export const assignments: Assignment[] = [
     subject: "数学",
     questionIds: ["q-4"],
     textbookIds: ["tb-1"],
+    knowledgePointIds: ["kp-7", "kp-8"],
+    chapterMounts: [{ textbookId: "tb-1", chapterId: "ch-3-1" }],
     status: "draft",
     updatedAt: "2026-06-02",
+  },
+  {
+    id: "as-3",
+    title: "整式的加减 · 随堂练习",
+    subject: "数学",
+    questionIds: ["q-5", "q-8"],
+    textbookIds: ["tb-1"],
+    knowledgePointIds: ["kp-5", "kp-6"],
+    chapterMounts: [],
+    status: "draft",
+    updatedAt: "2026-06-10",
+  },
+]
+
+// 微课
+export const microlessons: Microlesson[] = [
+  {
+    id: "ml-1",
+    title: "认识负数与数轴",
+    subject: "数学",
+    duration: "06:42",
+    knowledgePointIds: ["kp-1", "kp-2"],
+    chapterMounts: [{ textbookId: "tb-1", chapterId: "ch-1-1" }],
+    updatedAt: "2026-05-18",
+  },
+  {
+    id: "ml-2",
+    title: "有理数的乘除法则精讲",
+    subject: "数学",
+    duration: "09:15",
+    knowledgePointIds: ["kp-4"],
+    chapterMounts: [{ textbookId: "tb-1", chapterId: "ch-1-4" }],
+    updatedAt: "2026-05-25",
+  },
+  {
+    id: "ml-3",
+    title: "合并同类项技巧",
+    subject: "数学",
+    duration: "07:08",
+    knowledgePointIds: ["kp-6"],
+    chapterMounts: [],
+    updatedAt: "2026-06-05",
+  },
+]
+
+// 空中课堂
+export const airClasses: AirClass[] = [
+  {
+    id: "ac-1",
+    title: "有理数运算综合复习课",
+    subject: "数学",
+    teacher: "王明老师",
+    knowledgePointIds: ["kp-3", "kp-4"],
+    chapterMounts: [{ textbookId: "tb-1", chapterId: "ch-1-3" }],
+    updatedAt: "2026-05-20",
+  },
+  {
+    id: "ac-2",
+    title: "整式概念与化简专题",
+    subject: "数学",
+    teacher: "李芳老师",
+    knowledgePointIds: ["kp-5", "kp-6"],
+    chapterMounts: [],
+    updatedAt: "2026-06-07",
   },
 ]

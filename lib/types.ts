@@ -90,7 +90,32 @@ export interface Assignment {
   questionIds: string[]
   // 同样可以归属多个教材
   textbookIds: string[]
+  // 章节锚点：作业也挂到具体章节
+  knowledgePointIds: string[]
+  chapterMounts: { textbookId: string; chapterId: string }[]
   status: "draft" | "published"
+  updatedAt: string
+}
+
+// 微课
+export interface Microlesson {
+  id: string
+  title: string
+  subject: string
+  duration: string // 时长，如 "8:30"
+  knowledgePointIds: string[]
+  chapterMounts: { textbookId: string; chapterId: string }[]
+  updatedAt: string
+}
+
+// 空中课堂
+export interface AirClass {
+  id: string
+  title: string
+  subject: string
+  teacher: string // 主讲教师
+  knowledgePointIds: string[]
+  chapterMounts: { textbookId: string; chapterId: string }[]
   updatedAt: string
 }
 
@@ -110,6 +135,16 @@ export const SYNC_RESOURCE_TYPES: SyncResourceType[] = [
   "microlesson",
   "airclass",
 ]
+
+// 章节挂载时，四类资源统一成这个结构展示 / 操作
+export interface NormalizedResource {
+  id: string
+  kind: SyncResourceType
+  title: string
+  subtitle?: string // 题型 / 时长 / 主讲等附属信息
+  knowledgePointIds: string[]
+  chapterMounts: { textbookId: string; chapterId: string }[]
+}
 
 // 教材同步关系：把教材A的某个目录与教材B的某个目录建立对应，
 // 并指定这条对应上要同步哪些资源（纯手工设定，无自动推荐 / 置信度）
