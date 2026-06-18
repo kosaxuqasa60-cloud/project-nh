@@ -7,6 +7,8 @@ import {
   FileStack,
   ListTree,
   PenLine,
+  Replace,
+  Tags,
 } from "lucide-react"
 import { PageHeader } from "@/components/admin/page-header"
 import { Badge } from "@/components/ui/badge"
@@ -14,11 +16,11 @@ import { Card, CardContent } from "@/components/ui/card"
 import { useStore } from "@/lib/store"
 
 export default function OverviewPage() {
-  const { textbooks, chapters, questions, assignments } = useStore()
+  const { textbooks, chapters, questions, assignments, knowledgePoints } = useStore()
 
   const stats = [
     { label: "教材", value: textbooks.length, icon: BookOpen, href: "/textbooks" },
-    { label: "章节节点", value: chapters.length, icon: ListTree, href: "/chapters" },
+    { label: "知识点", value: knowledgePoints.length, icon: Tags, href: "/knowledge-points" },
     { label: "题目", value: questions.length, icon: FileStack, href: "/questions" },
     { label: "作业", value: assignments.length, icon: PenLine, href: "/assignments" },
   ]
@@ -26,35 +28,35 @@ export default function OverviewPage() {
   const steps = [
     {
       n: 1,
-      title: "建立教材",
-      desc: "按学科 / 学段 / 年级 / 册次 / 版本 / 年份维护教材。教材是题目与作业的挂载载体。",
+      title: "建立教材与章节目录",
+      desc: "按学科 / 学段 / 年级 / 册次 / 版本 / 年份维护教材，并为每套教材搭建树状章节目录。",
       icon: BookOpen,
       href: "/textbooks",
       action: "进入教材管理",
     },
     {
       n: 2,
-      title: "编辑章节目录",
-      desc: "为每套教材搭建树状章节目录。目录节点是题目挂载的最小颗粒。",
-      icon: ListTree,
-      href: "/chapters",
-      action: "编辑章节目录",
+      title: "维护知识点 + 题目打标签",
+      desc: "知识点是跨教材的稳定锚点。题目只需打一次知识点标签，即可被任意版本教材复用归集。",
+      icon: Tags,
+      href: "/knowledge-points",
+      action: "进入知识点体系",
     },
     {
       n: 3,
-      title: "维护题库并挂载",
-      desc: "题目独立存在，通过多对多挂载关联到一个或多个教材的章节。换教材无需迁移题目。",
+      title: "章节批量挂题（非逐题）",
+      desc: "在章节上一键按知识点自动归集题目，或批量勾选挂入。操作在章节层，不再一题一题挂。",
       icon: FileStack,
-      href: "/questions",
-      action: "进入题库管理",
+      href: "/textbooks",
+      action: "去教材详情批量挂题",
     },
     {
       n: 4,
-      title: "组卷成作业",
-      desc: "把题目组合成作业，作业同样可关联多个教材，实现跨版本复用。",
-      icon: PenLine,
-      href: "/assignments",
-      action: "进入作业管理",
+      title: "换教材：章节映射批量继承",
+      desc: "换教材只做几十条「旧章节 → 新章节」对应，系统按知识点自动推荐，题目顺映射批量继承。",
+      icon: Replace,
+      href: "/migrate",
+      action: "进入换教材映射",
     },
   ]
 
@@ -130,13 +132,13 @@ export default function OverviewPage() {
         <CardContent className="space-y-2 pt-6">
           <div className="flex items-center gap-2">
             <Badge className="bg-primary text-primary-foreground">设计要点</Badge>
-            <p className="font-medium">关于「换教材」的内容关系</p>
+            <p className="font-medium">如何把挂载的人力成本降下来</p>
           </div>
           <ul className="ml-1 space-y-1.5 text-sm text-muted-foreground">
-            <li>· 题目 / 作业不绑定单一教材，而是以「多对多挂载」关联到教材的章节节点。</li>
-            <li>· 同一道题可同时挂载在人教版与北师大版的不同章节下，换教材时无需迁移题目。</li>
-            <li>· 教材带「年份」字段，旧版本可归档保留，新版本独立维护，互不影响。</li>
-            <li>· 后续若需自动对应，可在此基础上叠加「章节映射」或「知识点中间层」，当前结构已为其预留空间。</li>
+            <li>· 操作从「单题」上移到「章节 + 批量」：在章节上批量挂题，不再逐题点。</li>
+            <li>· 知识点中间层：题目打一次知识点标签，即可被任意版本教材的章节自动归集。</li>
+            <li>· 换教材靠「章节映射」：只对应几十个章节节点（系统按知识点自动推荐），题目顺映射批量继承，不搬题。</li>
+            <li>· 教材带「年份」字段，旧版本归档保留，新版本独立维护，互不影响。</li>
           </ul>
         </CardContent>
       </Card>

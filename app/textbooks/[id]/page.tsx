@@ -32,7 +32,7 @@ export default function TextbookDetailPage() {
 
   const chapterCount = chapters.filter((c) => c.textbookId === tb.id).length
   const mountedQuestions = questions.filter((q) =>
-    q.mounts.some((m) => m.textbookId === tb.id),
+    q.chapterMounts.some((m) => m.textbookId === tb.id),
   )
 
   const meta = [
@@ -112,9 +112,9 @@ export default function TextbookDetailPage() {
             </CardHeader>
             <CardContent className="space-y-2">
               {mountedQuestions.map((q) => {
-                const chapterId = q.mounts.find((m) => m.textbookId === tb.id)?.chapterId
+                const chapterId = q.chapterMounts.find((m) => m.textbookId === tb.id)?.chapterId
                 const chapter = chapters.find((c) => c.id === chapterId)
-                const otherCount = q.mounts.filter((m) => m.textbookId !== tb.id).length
+                const otherCount = q.chapterMounts.filter((m) => m.textbookId !== tb.id).length
                 return (
                   <div
                     key={q.id}

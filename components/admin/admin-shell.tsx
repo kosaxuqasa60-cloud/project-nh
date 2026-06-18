@@ -9,6 +9,8 @@ import {
   ListTree,
   PenLine,
   Search,
+  Tags,
+  Replace,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -17,8 +19,10 @@ import { Input } from "@/components/ui/input"
 const NAV = [
   { href: "/", label: "流程总览", icon: LayoutDashboard },
   { href: "/textbooks", label: "教材管理", icon: BookOpen },
+  { href: "/knowledge-points", label: "知识点体系", icon: Tags },
   { href: "/chapters", label: "章节目录", icon: ListTree },
   { href: "/questions", label: "题库管理", icon: FileStack },
+  { href: "/migrate", label: "换教材映射", icon: Replace },
   { href: "/assignments", label: "作业管理", icon: PenLine },
 ]
 

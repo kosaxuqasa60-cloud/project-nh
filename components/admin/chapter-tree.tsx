@@ -7,12 +7,15 @@ import {
   ChevronRight,
   FileStack,
   GripVertical,
+  Layers,
   Plus,
   Trash2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
+import { BatchMountSheet } from "@/components/admin/batch-mount-sheet"
 import { useStore } from "@/lib/store"
 import type { ChapterNode } from "@/lib/types"
 
@@ -22,6 +25,13 @@ export function ChapterTree({ textbookId }: { textbookId: string }) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draft, setDraft] = useState("")
+  const [mountChapterId, setMountChapterId] = useState<string | null>(null)
+  const [sheetOpen, setSheetOpen] = useState(false)
+
+  function openMount(chapterId: string) {
+    setMountChapterId(chapterId)
+    setSheetOpen(true)
+  }
 
   const tbChapters = chapters.filter((c) => c.textbookId === textbookId)
   const roots = tbChapters
@@ -62,6 +72,7 @@ export function ChapterTree({ textbookId }: { textbookId: string }) {
     const hasKids = kids.length > 0
     const isOpen = expanded[node.id] ?? true
     const count = countQuestionsByChapter(node.id)
+    const kpCount = node.knowledgePointIds.length
 
     return (
       <div key={node.id}>
@@ -105,16 +116,33 @@ export function ChapterTree({ textbookId }: { textbookId: string }) {
             </button>
           )}
 
-          <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-[11px] tabular-nums text-accent-foreground">
+          {kpCount > 0 && (
+            <Badge
+              variant="outline"
+              className="ml-2 border-chart-2/30 bg-chart-2/10 px-1.5 py-0 text-[11px] font-normal text-chart-2"
+            >
+              {kpCount} 知识点
+            </Badge>
+          )}
+          <span className="ml-1.5 inline-flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-[11px] tabular-nums text-accent-foreground">
             <FileStack className="size-3" />
             {count}
           </span>
 
-          <div className="ml-auto flex items-center gap-0.5 opacity-0 group-hover:opacity-100">
+          <div className="ml-auto flex items-center gap-0.5">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1 px-2 text-xs text-primary opacity-0 hover:text-primary group-hover:opacity-100"
+              title="批量挂题"
+              onClick={() => openMount(node.id)}
+            >
+              <Layers className="size-3.5" /> 批量挂题
+            </Button>
             <Button
               variant="ghost"
               size="icon"
-              className="size-7"
+              className="size-7 opacity-0 group-hover:opacity-100"
               title="新增子节点"
               onClick={() => addChild(node.id)}
             >
@@ -123,7 +151,7 @@ export function ChapterTree({ textbookId }: { textbookId: string }) {
             <Button
               variant="ghost"
               size="icon"
-              className="size-7 text-destructive hover:text-destructive"
+              className="size-7 text-destructive opacity-0 hover:text-destructive group-hover:opacity-100"
               title="删除"
               onClick={() => {
                 removeChapter(node.id)
@@ -143,7 +171,7 @@ export function ChapterTree({ textbookId }: { textbookId: string }) {
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          点击节点名称可重命名，悬停显示新增 / 删除操作。徽标为该节点已挂载题目数。
+          点击节点名称可重命名。悬停节点点「批量挂题」按知识点一键归集或勾选挂入，无需逐题操作。
         </p>
         <Button variant="outline" size="sm" onClick={addRoot}>
           <Plus className="size-4" /> 新增章
@@ -158,6 +186,13 @@ export function ChapterTree({ textbookId }: { textbookId: string }) {
           </div>
         )}
       </div>
+
+      <BatchMountSheet
+        textbookId={textbookId}
+        chapterId={mountChapterId}
+        open={sheetOpen}
+        onOpenChange={setSheetOpen}
+      />
     </div>
   )
 }

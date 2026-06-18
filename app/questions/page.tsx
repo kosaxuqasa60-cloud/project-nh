@@ -1,12 +1,11 @@
 "use client"
 
-import { useState } from "react"
-import { Link2, Plus } from "lucide-react"
-import { MountDialog } from "@/components/admin/mount-dialog"
+import { useMemo, useState } from "react"
+import { FileStack, Tags, TriangleAlert } from "lucide-react"
 import { PageHeader } from "@/components/admin/page-header"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
 import {
   Select,
   SelectContent,
@@ -16,139 +15,138 @@ import {
 } from "@/components/ui/select"
 import { useStore } from "@/lib/store"
 import { QUESTION_TYPE_LABELS, type QuestionType } from "@/lib/types"
-import { cn } from "@/lib/utils"
 
 const ALL = "all"
 
-const DIFF_LABELS = ["", "极易", "容易", "中等", "较难", "困难"]
-
 export default function QuestionsPage() {
-  const { questions, textbooks, chapters } = useStore()
-  const [type, setType] = useState(ALL)
-  const [tbFilter, setTbFilter] = useState(ALL)
+  const { questions, textbooks, chapters, knowledgePoints } = useStore()
+  const [keyword, setKeyword] = useState("")
+  const [type, setType] = useState<string>(ALL)
+  const [kpFilter, setKpFilter] = useState<string>(ALL)
 
-  const filtered = questions.filter(
-    (q) =>
-      (type === ALL || q.type === type) &&
-      (tbFilter === ALL || q.mounts.some((m) => m.textbookId === tbFilter)),
+  const kpName = (id: string) => knowledgePoints.find((k) => k.id === id)?.name ?? id
+
+  const filtered = useMemo(
+    () =>
+      questions.filter(
+        (q) =>
+          (type === ALL || q.type === type) &&
+          (kpFilter === ALL || q.knowledgePointIds.includes(kpFilter)) &&
+          (!keyword || q.stem.includes(keyword)),
+      ),
+    [questions, type, kpFilter, keyword],
   )
 
-  const typeItems = { all: "全部", ...QUESTION_TYPE_LABELS }
-  const tbFilterItems = {
-    all: "全部",
-    ...Object.fromEntries(
-      textbooks.map((t) => [t.id, `${t.version} · ${t.subject} ${t.grade}`]),
-    ),
+  const untagged = questions.filter((q) => q.knowledgePointIds.length === 0).length
+
+  const typeItems = { all: "全部题型", ...QUESTION_TYPE_LABELS }
+  const kpItems = {
+    all: "全部知识点",
+    ...Object.fromEntries(knowledgePoints.map((k) => [k.id, k.name])),
   }
 
   return (
     <div>
       <PageHeader
         title="题库管理"
-        description="题目独立于教材存在，通过「挂载」与教材章节建立多对多关系。一道题可被多个版本教材复用。"
-        actions={
-          <Button>
-            <Plus className="size-4" /> 新建题目
-          </Button>
-        }
+        description="题目以「知识点标签」为核心。打好标签后，题目即可被任意版本教材的章节自动归集，无需逐题挂载。章节挂载在「教材详情 → 批量挂题」中批量完成。"
       />
 
-      <Card className="mb-4 flex flex-wrap items-center gap-3 p-4">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-medium text-muted-foreground">题型</span>
-          <Select value={type} onValueChange={setType} items={typeItems}>
-            <SelectTrigger className="h-9 w-[130px]"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">全部</SelectItem>
-              {(Object.keys(QUESTION_TYPE_LABELS) as QuestionType[]).map((t) => (
-                <SelectItem key={t} value={t}>{QUESTION_TYPE_LABELS[t]}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      {untagged > 0 && (
+        <div className="mb-4 flex items-center gap-2 rounded-lg border border-chart-4/30 bg-chart-4/10 px-4 py-2.5 text-sm text-chart-4">
+          <TriangleAlert className="size-4 shrink-0" />
+          有 {untagged} 道题尚未打知识点标签，将无法被自动归集，请尽快补充。
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-medium text-muted-foreground">挂载教材</span>
-          <Select value={tbFilter} onValueChange={setTbFilter} items={tbFilterItems}>
-            <SelectTrigger className="h-9 w-[200px]"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">全部</SelectItem>
-              {textbooks.map((t) => (
-                <SelectItem key={t.id} value={t.id}>
-                  {t.version} · {t.subject} {t.grade}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+      )}
+
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <Input
+          value={keyword}
+          onChange={(e) => setKeyword(e.target.value)}
+          placeholder="搜索题干…"
+          className="h-9 w-56"
+        />
+        <Select value={type} onValueChange={setType} items={typeItems}>
+          <SelectTrigger className="h-9 w-[130px]"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>全部题型</SelectItem>
+            {(Object.keys(QUESTION_TYPE_LABELS) as QuestionType[]).map((t) => (
+              <SelectItem key={t} value={t}>{QUESTION_TYPE_LABELS[t]}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={kpFilter} onValueChange={setKpFilter} items={kpItems}>
+          <SelectTrigger className="h-9 w-[200px]"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>全部知识点</SelectItem>
+            {knowledgePoints.map((k) => (
+              <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <span className="ml-auto text-sm text-muted-foreground">
           共 {filtered.length} 道题
         </span>
-      </Card>
+      </div>
 
-      <div className="space-y-3">
-        {filtered.map((q) => (
-          <Card key={q.id} className="p-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
-              <div className="flex flex-1 flex-col gap-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="secondary" className="font-normal">
+      <div className="space-y-2.5">
+        {filtered.map((q) => {
+          const mountTbs = Array.from(new Set(q.chapterMounts.map((m) => m.textbookId)))
+          return (
+            <Card key={q.id}>
+              <CardContent className="space-y-3 py-4">
+                <div className="flex items-start gap-3">
+                  <Badge variant="secondary" className="mt-0.5 shrink-0 font-normal">
                     {QUESTION_TYPE_LABELS[q.type]}
                   </Badge>
-                  <Badge variant="outline" className="font-normal text-muted-foreground">
-                    {q.subject}
-                  </Badge>
-                  <span
-                    className={cn(
-                      "rounded-full px-2 py-0.5 text-[11px] font-medium",
-                      q.difficulty <= 2
-                        ? "bg-chart-3/15 text-chart-3"
-                        : q.difficulty === 3
-                          ? "bg-chart-4/15 text-chart-4"
-                          : "bg-chart-5/15 text-chart-5",
-                    )}
-                  >
-                    {DIFF_LABELS[q.difficulty]}
+                  <p className="flex-1 text-sm leading-relaxed text-foreground/90">
+                    {q.stem}
+                  </p>
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    难度 {q.difficulty}
                   </span>
-                  <span className="text-xs text-muted-foreground">更新于 {q.updatedAt}</span>
                 </div>
-                <p className="text-sm text-foreground/90">{q.stem}</p>
 
-                {/* 挂载关系 */}
-                <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                  {q.mounts.length === 0 ? (
-                    <span className="text-xs text-muted-foreground">未挂载到任何教材</span>
+                <div className="flex flex-wrap items-center gap-1.5 pl-1">
+                  <Tags className="size-3.5 text-chart-2" />
+                  {q.knowledgePointIds.length > 0 ? (
+                    q.knowledgePointIds.map((id) => (
+                      <Badge
+                        key={id}
+                        variant="outline"
+                        className="border-chart-2/30 bg-chart-2/10 font-normal text-chart-2"
+                      >
+                        {kpName(id)}
+                      </Badge>
+                    ))
                   ) : (
-                    q.mounts.map((m) => {
-                      const tb = textbooks.find((t) => t.id === m.textbookId)
-                      const ch = chapters.find((c) => c.id === m.chapterId)
+                    <span className="text-xs text-chart-4">未打标签</span>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-1.5 border-t border-border pt-2 pl-1">
+                  <FileStack className="size-3.5 text-muted-foreground" />
+                  {mountTbs.length > 0 ? (
+                    mountTbs.map((tbId) => {
+                      const tb = textbooks.find((t) => t.id === tbId)
+                      const m = q.chapterMounts.find((x) => x.textbookId === tbId)
+                      const ch = chapters.find((c) => c.id === m?.chapterId)
                       return (
-                        <Badge
-                          key={`${m.textbookId}-${m.chapterId}`}
-                          variant="outline"
-                          className="gap-1 border-primary/20 bg-primary/5 font-normal text-primary"
-                        >
-                          <Link2 className="size-3" />
-                          {tb?.version} {ch?.title}
+                        <Badge key={tbId} variant="secondary" className="font-normal">
+                          {tb?.version} · {ch?.title}
                         </Badge>
                       )
                     })
+                  ) : (
+                    <span className="text-xs text-muted-foreground">
+                      暂未挂入任何教材章节（可在章节批量挂题中归集）
+                    </span>
                   )}
                 </div>
-              </div>
-
-              <div className="flex shrink-0 items-center gap-2">
-                <MountDialog
-                  question={q}
-                  trigger={
-                    <Button variant="outline" size="sm">
-                      <Link2 className="size-4" /> 管理挂载（{q.mounts.length}）
-                    </Button>
-                  }
-                />
-              </div>
-            </div>
-          </Card>
-        ))}
+              </CardContent>
+            </Card>
+          )
+        })}
       </div>
     </div>
   )

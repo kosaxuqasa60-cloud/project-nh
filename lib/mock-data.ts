@@ -1,4 +1,4 @@
-import type { Assignment, ChapterNode, Question, Textbook } from "./types"
+import type { Assignment, ChapterNode, KnowledgePoint, Question, Textbook } from "./types"
 
 export const SUBJECTS = ["数学", "语文", "英语", "物理", "化学", "生物"]
 export const VERSIONS = ["人教版", "北师大版", "苏教版", "华师大版", "外研版"]
@@ -67,27 +67,43 @@ export const textbooks: Textbook[] = [
   },
 ]
 
-// 章节目录（以 tb-1 人教版数学七上为例做完整目录）
-export const chapters: ChapterNode[] = [
-  { id: "ch-1", textbookId: "tb-1", parentId: null, title: "第一章 有理数", order: 1 },
-  { id: "ch-1-1", textbookId: "tb-1", parentId: "ch-1", title: "1.1 正数和负数", order: 1 },
-  { id: "ch-1-2", textbookId: "tb-1", parentId: "ch-1", title: "1.2 有理数", order: 2 },
-  { id: "ch-1-3", textbookId: "tb-1", parentId: "ch-1", title: "1.3 有理数的加减法", order: 3 },
-  { id: "ch-1-4", textbookId: "tb-1", parentId: "ch-1", title: "1.4 有理数的乘除法", order: 4 },
-  { id: "ch-2", textbookId: "tb-1", parentId: null, title: "第二章 整式的加减", order: 2 },
-  { id: "ch-2-1", textbookId: "tb-1", parentId: "ch-2", title: "2.1 整式", order: 1 },
-  { id: "ch-2-2", textbookId: "tb-1", parentId: "ch-2", title: "2.2 整式的加减", order: 2 },
-  { id: "ch-3", textbookId: "tb-1", parentId: null, title: "第三章 一元一次方程", order: 3 },
-  { id: "ch-3-1", textbookId: "tb-1", parentId: "ch-3", title: "3.1 从算式到方程", order: 1 },
-  { id: "ch-3-2", textbookId: "tb-1", parentId: "ch-3", title: "3.2 解一元一次方程", order: 2 },
-  // 北师大版数学七上（结构不同，用于演示同一题目挂多教材）
-  { id: "bs-1", textbookId: "tb-2", parentId: null, title: "第一章 丰富的图形世界", order: 1 },
-  { id: "bs-2", textbookId: "tb-2", parentId: null, title: "第二章 有理数及其运算", order: 2 },
-  { id: "bs-2-1", textbookId: "tb-2", parentId: "bs-2", title: "2.1 有理数", order: 1 },
-  { id: "bs-2-2", textbookId: "tb-2", parentId: "bs-2", title: "2.2 数轴", order: 2 },
-  { id: "bs-3", textbookId: "tb-2", parentId: null, title: "第三章 整式及其加减", order: 3 },
+// 知识点：数学七上的稳定考点，跨版本通用
+export const knowledgePoints: KnowledgePoint[] = [
+  { id: "kp-1", subject: "数学", group: "有理数", name: "正数与负数的概念" },
+  { id: "kp-2", subject: "数学", group: "有理数", name: "数轴与相反数" },
+  { id: "kp-3", subject: "数学", group: "有理数", name: "有理数的加减运算" },
+  { id: "kp-4", subject: "数学", group: "有理数", name: "有理数的乘除运算" },
+  { id: "kp-5", subject: "数学", group: "整式", name: "单项式与多项式" },
+  { id: "kp-6", subject: "数学", group: "整式", name: "整式的加减" },
+  { id: "kp-7", subject: "数学", group: "一元一次方程", name: "方程的概念" },
+  { id: "kp-8", subject: "数学", group: "一元一次方程", name: "解一元一次方程" },
 ]
 
+// 章节目录：每个节点声明它覆盖的知识点
+export const chapters: ChapterNode[] = [
+  // 人教版数学七上（tb-1）
+  { id: "ch-1", textbookId: "tb-1", parentId: null, title: "第一章 有理数", order: 1, knowledgePointIds: [] },
+  { id: "ch-1-1", textbookId: "tb-1", parentId: "ch-1", title: "1.1 正数和负数", order: 1, knowledgePointIds: ["kp-1"] },
+  { id: "ch-1-2", textbookId: "tb-1", parentId: "ch-1", title: "1.2 有理数", order: 2, knowledgePointIds: ["kp-2"] },
+  { id: "ch-1-3", textbookId: "tb-1", parentId: "ch-1", title: "1.3 有理数的加减法", order: 3, knowledgePointIds: ["kp-3"] },
+  { id: "ch-1-4", textbookId: "tb-1", parentId: "ch-1", title: "1.4 有理数的乘除法", order: 4, knowledgePointIds: ["kp-4"] },
+  { id: "ch-2", textbookId: "tb-1", parentId: null, title: "第二章 整式的加减", order: 2, knowledgePointIds: [] },
+  { id: "ch-2-1", textbookId: "tb-1", parentId: "ch-2", title: "2.1 整式", order: 1, knowledgePointIds: ["kp-5"] },
+  { id: "ch-2-2", textbookId: "tb-1", parentId: "ch-2", title: "2.2 整式的加减", order: 2, knowledgePointIds: ["kp-6"] },
+  { id: "ch-3", textbookId: "tb-1", parentId: null, title: "第三章 一元一次方程", order: 3, knowledgePointIds: [] },
+  { id: "ch-3-1", textbookId: "tb-1", parentId: "ch-3", title: "3.1 从算式到方程", order: 1, knowledgePointIds: ["kp-7"] },
+  { id: "ch-3-2", textbookId: "tb-1", parentId: "ch-3", title: "3.2 解一元一次方程", order: 2, knowledgePointIds: ["kp-8"] },
+  // 北师大版数学七上（tb-2，结构不同，知识点对应一致）
+  { id: "bs-1", textbookId: "tb-2", parentId: null, title: "第一章 丰富的图形世界", order: 1, knowledgePointIds: [] },
+  { id: "bs-2", textbookId: "tb-2", parentId: null, title: "第二章 有理数及其运算", order: 2, knowledgePointIds: [] },
+  { id: "bs-2-1", textbookId: "tb-2", parentId: "bs-2", title: "2.1 有理数", order: 1, knowledgePointIds: ["kp-1"] },
+  { id: "bs-2-2", textbookId: "tb-2", parentId: "bs-2", title: "2.2 数轴", order: 2, knowledgePointIds: ["kp-2"] },
+  { id: "bs-2-3", textbookId: "tb-2", parentId: "bs-2", title: "2.3 有理数的加减法", order: 3, knowledgePointIds: ["kp-3"] },
+  { id: "bs-2-4", textbookId: "tb-2", parentId: "bs-2", title: "2.4 有理数的乘除法", order: 4, knowledgePointIds: ["kp-4"] },
+  { id: "bs-3", textbookId: "tb-2", parentId: null, title: "第三章 整式及其加减", order: 3, knowledgePointIds: ["kp-5", "kp-6"] },
+]
+
+// 题目：打知识点标签，章节锚点可由知识点自动归集
 export const questions: Question[] = [
   {
     id: "q-1",
@@ -95,7 +111,8 @@ export const questions: Question[] = [
     type: "single",
     subject: "数学",
     difficulty: 1,
-    mounts: [
+    knowledgePointIds: ["kp-1"],
+    chapterMounts: [
       { textbookId: "tb-1", chapterId: "ch-1-1" },
       { textbookId: "tb-2", chapterId: "bs-2-1" },
     ],
@@ -107,7 +124,11 @@ export const questions: Question[] = [
     type: "fill",
     subject: "数学",
     difficulty: 2,
-    mounts: [{ textbookId: "tb-1", chapterId: "ch-1-3" }],
+    knowledgePointIds: ["kp-3"],
+    chapterMounts: [
+      { textbookId: "tb-1", chapterId: "ch-1-3" },
+      { textbookId: "tb-2", chapterId: "bs-2-3" },
+    ],
     updatedAt: "2026-05-18",
   },
   {
@@ -116,9 +137,10 @@ export const questions: Question[] = [
     type: "judge",
     subject: "数学",
     difficulty: 2,
-    mounts: [
+    knowledgePointIds: ["kp-4"],
+    chapterMounts: [
       { textbookId: "tb-1", chapterId: "ch-1-4" },
-      { textbookId: "tb-2", chapterId: "bs-2" },
+      { textbookId: "tb-2", chapterId: "bs-2-4" },
     ],
     updatedAt: "2026-05-15",
   },
@@ -128,7 +150,8 @@ export const questions: Question[] = [
     type: "subjective",
     subject: "数学",
     difficulty: 3,
-    mounts: [{ textbookId: "tb-1", chapterId: "ch-3-2" }],
+    knowledgePointIds: ["kp-8"],
+    chapterMounts: [{ textbookId: "tb-1", chapterId: "ch-3-2" }],
     updatedAt: "2026-06-01",
   },
   {
@@ -137,8 +160,65 @@ export const questions: Question[] = [
     type: "multiple",
     subject: "数学",
     difficulty: 3,
-    mounts: [],
+    knowledgePointIds: ["kp-5"],
+    chapterMounts: [
+      { textbookId: "tb-1", chapterId: "ch-2-1" },
+      { textbookId: "tb-2", chapterId: "bs-3" },
+    ],
     updatedAt: "2026-06-08",
+  },
+  {
+    id: "q-6",
+    stem: "在数轴上，表示 −2 的点到原点的距离是 ______。",
+    type: "fill",
+    subject: "数学",
+    difficulty: 1,
+    knowledgePointIds: ["kp-2"],
+    chapterMounts: [
+      { textbookId: "tb-1", chapterId: "ch-1-2" },
+      { textbookId: "tb-2", chapterId: "bs-2-2" },
+    ],
+    updatedAt: "2026-06-09",
+  },
+  {
+    id: "q-7",
+    stem: "计算：(−12) ÷ (−4) × 3 = ______。",
+    type: "fill",
+    subject: "数学",
+    difficulty: 2,
+    knowledgePointIds: ["kp-4"],
+    chapterMounts: [{ textbookId: "tb-1", chapterId: "ch-1-4" }],
+    updatedAt: "2026-06-09",
+  },
+  {
+    id: "q-8",
+    stem: "合并同类项：3a + 5a − 2a = ______。",
+    type: "fill",
+    subject: "数学",
+    difficulty: 2,
+    knowledgePointIds: ["kp-6"],
+    chapterMounts: [],
+    updatedAt: "2026-06-11",
+  },
+  {
+    id: "q-9",
+    stem: "下列各式是方程的是（　）。A. 3+2  B. x−1=0  C. a>b  D. 2x",
+    type: "single",
+    subject: "数学",
+    difficulty: 1,
+    knowledgePointIds: ["kp-7"],
+    chapterMounts: [],
+    updatedAt: "2026-06-11",
+  },
+  {
+    id: "q-10",
+    stem: "若 |x| = 5，则 x = ______。",
+    type: "fill",
+    subject: "数学",
+    difficulty: 2,
+    knowledgePointIds: ["kp-1", "kp-2"],
+    chapterMounts: [],
+    updatedAt: "2026-06-12",
   },
 ]
 
