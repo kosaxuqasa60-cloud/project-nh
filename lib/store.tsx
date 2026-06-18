@@ -6,14 +6,16 @@ import {
   chapters as seedChapters,
   knowledgePoints as seedKnowledgePoints,
   questions as seedQuestions,
+  syncLinks as seedSyncLinks,
   textbooks as seedTextbooks,
 } from "./mock-data"
 import type {
   Assignment,
-  ChapterMappingPair,
   ChapterNode,
+  ChapterSyncLink,
   KnowledgePoint,
   Question,
+  SyncResourceType,
   Textbook,
 } from "./types"
 
@@ -23,6 +25,7 @@ interface StoreValue {
   questions: Question[]
   assignments: Assignment[]
   knowledgePoints: KnowledgePoint[]
+  syncLinks: ChapterSyncLink[]
   addTextbook: (tb: Omit<Textbook, "id" | "updatedAt">) => Textbook
   updateTextbook: (id: string, patch: Partial<Textbook>) => void
   addChapter: (c: Omit<ChapterNode, "id">) => void
@@ -37,12 +40,10 @@ interface StoreValue {
   unmountQuestion: (questionId: string, textbookId: string, chapterId: string) => void
   // 按知识点把题目自动归集到某章节（一键拉题）
   autoCollectByKnowledgePoints: (textbookId: string, chapterId: string) => number
-  // 换教材：按章节映射批量继承题目
-  migrateByMapping: (
-    fromTextbookId: string,
-    toTextbookId: string,
-    pairs: ChapterMappingPair[],
-  ) => number
+  // 教材同步关系：建立 / 更新同步资源 / 删除
+  addSyncLink: (link: Omit<ChapterSyncLink, "id">) => void
+  updateSyncLinkTypes: (id: string, syncTypes: SyncResourceType[]) => void
+  removeSyncLink: (id: string) => void
   // 统计
   countQuestionsByChapter: (chapterId: string) => number
   countQuestionsByTextbook: (textbookId: string) => number
@@ -62,6 +63,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [assignments] = useState<Assignment[]>(seedAssignments)
   const [knowledgePoints, setKnowledgePoints] =
     useState<KnowledgePoint[]>(seedKnowledgePoints)
+  const [syncLinks, setSyncLinks] = useState<ChapterSyncLink[]>(seedSyncLinks)
 
   const value = useMemo<StoreValue>(
     () => ({
@@ -70,6 +72,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       questions,
       assignments,
       knowledgePoints,
+      syncLinks,
       addTextbook: (tb) => {
         const created: Textbook = { ...tb, id: nextId("tb"), updatedAt: today() }
         setTextbooks((prev) => [created, ...prev])
@@ -147,36 +150,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return count
       },
 
-      migrateByMapping: (fromTextbookId, toTextbookId, pairs) => {
-        const map = new Map<string, string>()
-        pairs.forEach((p) => {
-          if (p.toChapterId) map.set(p.fromChapterId, p.toChapterId)
-        })
-        let migrated = 0
-        setQuestions((prev) =>
-          prev.map((q) => {
-            const fromMounts = q.chapterMounts.filter(
-              (m) => m.textbookId === fromTextbookId && map.has(m.chapterId),
-            )
-            if (fromMounts.length === 0) return q
-            const newMounts = [...q.chapterMounts]
-            let changed = false
-            fromMounts.forEach((fm) => {
-              const toChapterId = map.get(fm.chapterId)!
-              const exists = newMounts.some(
-                (m) => m.textbookId === toTextbookId && m.chapterId === toChapterId,
-              )
-              if (!exists) {
-                newMounts.push({ textbookId: toTextbookId, chapterId: toChapterId })
-                changed = true
-              }
-            })
-            if (changed) migrated++
-            return changed ? { ...q, chapterMounts: newMounts, updatedAt: today() } : q
-          }),
-        )
-        return migrated
-      },
+      addSyncLink: (link) =>
+        setSyncLinks((prev) => [{ ...link, id: nextId("sl") }, ...prev]),
+      updateSyncLinkTypes: (id, syncTypes) =>
+        setSyncLinks((prev) =>
+          prev.map((l) => (l.id === id ? { ...l, syncTypes } : l)),
+        ),
+      removeSyncLink: (id) => setSyncLinks((prev) => prev.filter((l) => l.id !== id)),
 
       countQuestionsByChapter: (chapterId) =>
         questions.filter((q) => q.chapterMounts.some((m) => m.chapterId === chapterId))
@@ -189,7 +169,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return questions.filter((q) => q.knowledgePointIds.some((id) => set.has(id)))
       },
     }),
-    [textbooks, chapters, questions, assignments, knowledgePoints],
+    [textbooks, chapters, questions, assignments, knowledgePoints, syncLinks],
   )
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>

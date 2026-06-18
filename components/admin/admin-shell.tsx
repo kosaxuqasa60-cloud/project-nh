@@ -22,7 +22,7 @@ const NAV = [
   { href: "/knowledge-points", label: "知识点体系", icon: Tags },
   { href: "/chapters", label: "章节目录", icon: ListTree },
   { href: "/questions", label: "题库管理", icon: FileStack },
-  { href: "/migrate", label: "换教材映射", icon: Replace },
+  { href: "/migrate", label: "教材同步关系", icon: Replace },
   { href: "/assignments", label: "作业管理", icon: PenLine },
 ]
 

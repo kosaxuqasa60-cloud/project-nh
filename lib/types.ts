@@ -94,16 +94,30 @@ export interface Assignment {
   updatedAt: string
 }
 
-// 换教材时的章节映射：把旧教材的章节对应到新教材的章节
-export interface ChapterMappingPair {
-  fromChapterId: string
-  toChapterId: string | null // null 表示尚未对应
-  // 推荐置信度（按标题 / 知识点相似度），用于辅助决策
-  confidence?: number
+// 可同步的资源类型
+export type SyncResourceType = "question" | "assignment" | "microlesson" | "airclass"
+
+export const SYNC_RESOURCE_LABELS: Record<SyncResourceType, string> = {
+  question: "题目",
+  assignment: "作业",
+  microlesson: "微课",
+  airclass: "空中课堂",
 }
 
-export interface ChapterMapping {
+export const SYNC_RESOURCE_TYPES: SyncResourceType[] = [
+  "question",
+  "assignment",
+  "microlesson",
+  "airclass",
+]
+
+// 教材同步关系：把教材A的某个目录与教材B的某个目录建立对应，
+// 并指定这条对应上要同步哪些资源（纯手工设定，无自动推荐 / 置信度）
+export interface ChapterSyncLink {
+  id: string
   fromTextbookId: string
+  fromChapterId: string
   toTextbookId: string
-  pairs: ChapterMappingPair[]
+  toChapterId: string
+  syncTypes: SyncResourceType[]
 }

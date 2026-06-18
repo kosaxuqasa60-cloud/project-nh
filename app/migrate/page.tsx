@@ -1,8 +1,8 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import { toast } from "sonner"
-import { ArrowRight, Sparkles, Wand2 } from "lucide-react"
+import { ArrowLeftRight, Link2, Plus, Trash2 } from "lucide-react"
 import { PageHeader } from "@/components/admin/page-header"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -16,211 +16,298 @@ import {
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import { useStore } from "@/lib/store"
-import type { ChapterMappingPair, ChapterNode, Textbook } from "@/lib/types"
+import {
+  SYNC_RESOURCE_LABELS,
+  SYNC_RESOURCE_TYPES,
+  type ChapterNode,
+  type SyncResourceType,
+  type Textbook,
+} from "@/lib/types"
 
 const NONE = "__none__"
 
-export default function MigratePage() {
-  const { textbooks, chapters, questions, migrateByMapping } = useStore()
+export default function SyncMappingPage() {
+  const { textbooks, chapters, syncLinks, addSyncLink, updateSyncLinkTypes, removeSyncLink } =
+    useStore()
 
-  const mathTextbooks = textbooks.filter((t) => t.subject === "数学")
-  const [fromId, setFromId] = useState<string>(mathTextbooks[0]?.id ?? "")
-  const [toId, setToId] = useState<string>(mathTextbooks[1]?.id ?? "")
-  const [pairs, setPairs] = useState<Record<string, string>>({})
+  const [fromId, setFromId] = useState<string>(textbooks[0]?.id ?? "")
+  const [toId, setToId] = useState<string>(textbooks[1]?.id ?? "")
+
+  // 新增同步关系的草稿
+  const [draftFrom, setDraftFrom] = useState<string>("")
+  const [draftTo, setDraftTo] = useState<string>("")
+  const [draftTypes, setDraftTypes] = useState<SyncResourceType[]>(["question"])
 
   const tbLabel = (t?: Textbook) =>
     t ? `${t.version} · ${t.subject}${t.grade}（${t.year}）` : ""
 
-  // 可挂题的叶子章节（声明了知识点的节点）
-  const leafChapters = (tbId: string) =>
-    chapters.filter((c) => c.textbookId === tbId && c.knowledgePointIds.length > 0)
+  const tbItems = Object.fromEntries(textbooks.map((t) => [t.id, tbLabel(t)]))
 
-  const fromChapters = useMemo(() => leafChapters(fromId), [fromId, chapters])
-  const toChapters = useMemo(() => leafChapters(toId), [toId, chapters])
+  // 某教材下的章节（含层级缩进显示）
+  const chaptersOf = (tbId: string) => chapters.filter((c) => c.textbookId === tbId)
+  const fromChapters = useMemo(() => chaptersOf(fromId), [fromId, chapters])
+  const toChapters = useMemo(() => chaptersOf(toId), [toId, chapters])
 
-  // 自动推荐：按共享知识点数量匹配
-  function recommend(): Record<string, string> {
-    const next: Record<string, string> = {}
-    fromChapters.forEach((fc) => {
-      let best: { id: string; score: number } | null = null
-      toChapters.forEach((tc) => {
-        const shared = tc.knowledgePointIds.filter((id) =>
-          fc.knowledgePointIds.includes(id),
-        ).length
-        if (shared > 0 && (!best || shared > best.score)) {
-          best = { id: tc.id, score: shared }
-        }
-      })
-      if (best) next[fc.id] = best.id
-    })
-    return next
+  const chapterTitle = (id: string) => chapters.find((c) => c.id === id)?.title ?? "—"
+  const indent = (c: ChapterNode) => (c.parentId ? "　" : "")
+
+  const fromChapterItems = {
+    [NONE]: "选择教材一目录",
+    ...Object.fromEntries(fromChapters.map((c) => [c.id, c.title])),
   }
-
-  // 切换教材时自动给出推荐
-  useEffect(() => {
-    if (fromId && toId && fromId !== toId) {
-      setPairs(recommend())
-    } else {
-      setPairs({})
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fromId, toId])
-
-  const confidenceOf = (fc: ChapterNode, toChapterId?: string) => {
-    if (!toChapterId) return 0
-    const tc = toChapters.find((c) => c.id === toChapterId)
-    if (!tc) return 0
-    const shared = tc.knowledgePointIds.filter((id) =>
-      fc.knowledgePointIds.includes(id),
-    ).length
-    const denom = Math.max(fc.knowledgePointIds.length, 1)
-    return Math.round((shared / denom) * 100)
-  }
-
-  const qCountOf = (chapterId: string) =>
-    questions.filter((q) =>
-      q.chapterMounts.some((m) => m.textbookId === fromId && m.chapterId === chapterId),
-    ).length
-
-  const mappedPairs = Object.values(pairs).filter(Boolean).length
-  const migratableQuestions = fromChapters
-    .filter((fc) => pairs[fc.id])
-    .reduce((sum, fc) => sum + qCountOf(fc.id), 0)
-
-  const toItems = {
-    [NONE]: "暂不对应",
+  const toChapterItems = {
+    [NONE]: "选择教材二目录",
     ...Object.fromEntries(toChapters.map((c) => [c.id, c.title])),
   }
 
-  function applyMigration() {
-    const list: ChapterMappingPair[] = fromChapters.map((fc) => ({
-      fromChapterId: fc.id,
-      toChapterId: pairs[fc.id] || null,
-    }))
-    const migrated = migrateByMapping(fromId, toId, list)
-    if (migrated > 0) toast.success(`已按映射批量继承 ${migrated} 道题到新教材`)
-    else toast.info("没有可继承的题目，请检查映射与原教材挂题情况")
+  // 当前两套教材之间已建立的同步关系
+  const currentLinks = syncLinks.filter(
+    (l) =>
+      (l.fromTextbookId === fromId && l.toTextbookId === toId) ||
+      (l.fromTextbookId === toId && l.toTextbookId === fromId),
+  )
+
+  function toggleDraftType(t: SyncResourceType) {
+    setDraftTypes((prev) =>
+      prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t],
+    )
   }
+
+  function handleAdd() {
+    if (!draftFrom || draftFrom === NONE || !draftTo || draftTo === NONE) {
+      toast.error("请先选择教材一与教材二的对应目录")
+      return
+    }
+    if (draftTypes.length === 0) {
+      toast.error("请至少选择一种要同步的资源")
+      return
+    }
+    const dup = currentLinks.some(
+      (l) =>
+        (l.fromChapterId === draftFrom && l.toChapterId === draftTo) ||
+        (l.fromChapterId === draftTo && l.toChapterId === draftFrom),
+    )
+    if (dup) {
+      toast.error("这两个目录已建立同步关系")
+      return
+    }
+    addSyncLink({
+      fromTextbookId: fromId,
+      fromChapterId: draftFrom,
+      toTextbookId: toId,
+      toChapterId: draftTo,
+      syncTypes: draftTypes,
+    })
+    toast.success("已建立同步关系")
+    setDraftFrom("")
+    setDraftTo("")
+    setDraftTypes(["question"])
+  }
+
+  function toggleLinkType(linkId: string, current: SyncResourceType[], t: SyncResourceType) {
+    const next = current.includes(t)
+      ? current.filter((x) => x !== t)
+      : [...current, t]
+    updateSyncLinkTypes(linkId, next)
+  }
+
+  const sameTb = fromId === toId
 
   return (
     <div>
       <PageHeader
-        title="换教材 · 章节映射"
-        description="换教材不搬题目，只做几十条「旧章节 → 新章节」的对应。系统按共享知识点自动推荐，确认后所有题目顺映射批量继承，无需逐题迁移。"
+        title="教材同步关系"
+        description="把教材一的目录与教材二的目录建立对应，并指定每条对应要同步的资源（题目 / 作业 / 微课 / 空中课堂）。完全手工设定，按需勾选。"
       />
 
       {/* 教材选择 */}
       <Card className="mb-5">
         <CardContent className="flex flex-col gap-4 pt-6 sm:flex-row sm:items-end">
           <div className="flex-1 space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground">原教材（迁出）</label>
-            <Select value={fromId} onValueChange={setFromId} items={Object.fromEntries(mathTextbooks.map((t) => [t.id, tbLabel(t)]))}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+            <label className="text-xs font-medium text-muted-foreground">教材一</label>
+            <Select value={fromId} onValueChange={setFromId} items={tbItems}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
-                {mathTextbooks.map((t) => (
-                  <SelectItem key={t.id} value={t.id}>{tbLabel(t)}</SelectItem>
+                {textbooks.map((t) => (
+                  <SelectItem key={t.id} value={t.id}>
+                    {tbLabel(t)}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
           <div className="flex size-9 shrink-0 items-center justify-center self-center rounded-full bg-accent text-accent-foreground sm:mb-1">
-            <ArrowRight className="size-4" />
+            <ArrowLeftRight className="size-4" />
           </div>
           <div className="flex-1 space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground">新教材（迁入）</label>
-            <Select value={toId} onValueChange={setToId} items={Object.fromEntries(mathTextbooks.map((t) => [t.id, tbLabel(t)]))}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+            <label className="text-xs font-medium text-muted-foreground">教材二</label>
+            <Select value={toId} onValueChange={setToId} items={tbItems}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
-                {mathTextbooks.map((t) => (
-                  <SelectItem key={t.id} value={t.id}>{tbLabel(t)}</SelectItem>
+                {textbooks.map((t) => (
+                  <SelectItem key={t.id} value={t.id}>
+                    {tbLabel(t)}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
-          <Button variant="outline" onClick={() => setPairs(recommend())} className="sm:mb-0.5">
-            <Wand2 className="size-4" /> 重新自动推荐
-          </Button>
         </CardContent>
       </Card>
 
-      {fromId === toId ? (
+      {sameTb ? (
         <p className="py-16 text-center text-sm text-muted-foreground">
-          请选择两套不同的教材进行映射。
+          请选择两套不同的教材以建立同步关系。
         </p>
       ) : (
         <>
-          {/* 汇总条 */}
-          <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-primary/20 bg-primary/5 px-4 py-3">
-            <Sparkles className="size-5 text-primary" />
-            <p className="text-sm">
-              共 <b>{fromChapters.length}</b> 个待映射章节，已对应{" "}
-              <b className="text-primary">{mappedPairs}</b> 个，将批量继承约{" "}
-              <b className="text-primary tabular-nums">{migratableQuestions}</b> 道题。
-            </p>
-            <Button className="ml-auto" onClick={applyMigration} disabled={mappedPairs === 0}>
-              应用映射并批量继承
-            </Button>
-          </div>
-
-          {/* 映射表头 */}
-          <div className="mb-2 grid grid-cols-[1fr_auto_1fr_auto] items-center gap-3 px-3 text-xs font-medium text-muted-foreground">
-            <span>原教材章节 · {tbLabel(textbooks.find((t) => t.id === fromId))}</span>
-            <span />
-            <span>新教材章节 · {tbLabel(textbooks.find((t) => t.id === toId))}</span>
-            <span className="text-right">置信度</span>
-          </div>
-
-          {/* 映射行 */}
-          <div className="space-y-2">
-            {fromChapters.map((fc) => {
-              const target = pairs[fc.id]
-              const conf = confidenceOf(fc, target)
-              const qc = qCountOf(fc.id)
-              return (
-                <Card key={fc.id} className={cn(!target && "border-dashed")}>
-                  <CardContent className="grid grid-cols-[1fr_auto_1fr_auto] items-center gap-3 py-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{fc.title}</p>
-                      <p className="text-xs text-muted-foreground">{qc} 道题待继承</p>
-                    </div>
-                    <ArrowRight className="size-4 text-muted-foreground" />
-                    <Select
-                      value={target || NONE}
-                      items={toItems}
-                      onValueChange={(v) =>
-                        setPairs((prev) => ({ ...prev, [fc.id]: v === NONE ? "" : v }))
-                      }
-                    >
-                      <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={NONE}>暂不对应</SelectItem>
-                        {toChapters.map((tc) => (
-                          <SelectItem key={tc.id} value={tc.id}>{tc.title}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <div className="text-right">
-                      {target ? (
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            "font-normal tabular-nums",
-                            conf >= 100
-                              ? "border-chart-3/40 bg-chart-3/10 text-chart-3"
-                              : "border-chart-4/40 bg-chart-4/10 text-chart-4",
-                          )}
-                        >
-                          {conf}%
-                        </Badge>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
+          {/* 新增同步关系 */}
+          <Card className="mb-5 border-primary/20">
+            <CardContent className="space-y-4 pt-6">
+              <div className="flex items-center gap-2">
+                <Plus className="size-4 text-primary" />
+                <p className="text-sm font-medium">新增同步关系</p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-[1fr_auto_1fr]">
+                <Select value={draftFrom || NONE} onValueChange={setDraftFrom} items={fromChapterItems}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NONE}>选择教材一目录</SelectItem>
+                    {fromChapters.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {indent(c)}
+                        {c.title}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div className="flex items-center justify-center text-muted-foreground">
+                  <ArrowLeftRight className="size-4" />
+                </div>
+                <Select value={draftTo || NONE} onValueChange={setDraftTo} items={toChapterItems}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NONE}>选择教材二目录</SelectItem>
+                    {toChapters.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {indent(c)}
+                        {c.title}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-medium text-muted-foreground">同步资源：</span>
+                {SYNC_RESOURCE_TYPES.map((t) => {
+                  const active = draftTypes.includes(t)
+                  return (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => toggleDraftType(t)}
+                      className={cn(
+                        "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                        active
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-border bg-background text-muted-foreground hover:bg-accent",
                       )}
-                    </div>
-                  </CardContent>
-                </Card>
-              )
-            })}
+                    >
+                      {SYNC_RESOURCE_LABELS[t]}
+                    </button>
+                  )
+                })}
+                <Button className="ml-auto" size="sm" onClick={handleAdd}>
+                  <Plus className="size-4" /> 建立同步
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 已建立的同步关系 */}
+          <div className="mb-2 flex items-center gap-2 px-1">
+            <Link2 className="size-4 text-muted-foreground" />
+            <p className="text-sm font-medium">
+              已建立的同步关系（<span className="tabular-nums">{currentLinks.length}</span>）
+            </p>
           </div>
+
+          {currentLinks.length === 0 ? (
+            <Card className="border-dashed">
+              <CardContent className="py-12 text-center text-sm text-muted-foreground">
+                这两套教材之间还没有同步关系，使用上方表单建立。
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-2">
+              {currentLinks.map((link) => {
+                // 统一以「教材一在左」展示
+                const leftIsFrom = link.fromTextbookId === fromId
+                const leftChapter = leftIsFrom ? link.fromChapterId : link.toChapterId
+                const rightChapter = leftIsFrom ? link.toChapterId : link.fromChapterId
+                return (
+                  <Card key={link.id}>
+                    <CardContent className="flex flex-col gap-3 py-3 lg:flex-row lg:items-center">
+                      <div className="grid flex-1 grid-cols-[1fr_auto_1fr] items-center gap-3">
+                        <p className="truncate text-sm font-medium" title={chapterTitle(leftChapter)}>
+                          {chapterTitle(leftChapter)}
+                        </p>
+                        <ArrowLeftRight className="size-4 shrink-0 text-primary" />
+                        <p className="truncate text-sm font-medium" title={chapterTitle(rightChapter)}>
+                          {chapterTitle(rightChapter)}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1.5 lg:border-l lg:pl-4">
+                        {SYNC_RESOURCE_TYPES.map((t) => {
+                          const active = link.syncTypes.includes(t)
+                          return (
+                            <button
+                              key={t}
+                              type="button"
+                              onClick={() => toggleLinkType(link.id, link.syncTypes, t)}
+                              title={active ? `点击取消同步「${SYNC_RESOURCE_LABELS[t]}」` : `点击同步「${SYNC_RESOURCE_LABELS[t]}」`}
+                            >
+                              <Badge
+                                variant="outline"
+                                className={cn(
+                                  "cursor-pointer font-normal transition-colors",
+                                  active
+                                    ? "border-primary/30 bg-primary/10 text-primary"
+                                    : "border-dashed text-muted-foreground/60 hover:bg-accent",
+                                )}
+                              >
+                                {SYNC_RESOURCE_LABELS[t]}
+                              </Badge>
+                            </button>
+                          )
+                        })}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-8 text-destructive hover:text-destructive"
+                          title="删除同步关系"
+                          onClick={() => {
+                            removeSyncLink(link.id)
+                            toast.success("已删除同步关系")
+                          }}
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )
+              })}
+            </div>
+          )}
         </>
       )}
     </div>

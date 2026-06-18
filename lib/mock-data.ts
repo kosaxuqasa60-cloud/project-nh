@@ -1,4 +1,11 @@
-import type { Assignment, ChapterNode, KnowledgePoint, Question, Textbook } from "./types"
+import type {
+  Assignment,
+  ChapterNode,
+  ChapterSyncLink,
+  KnowledgePoint,
+  Question,
+  Textbook,
+} from "./types"
 
 export const SUBJECTS = ["数学", "语文", "英语", "物理", "化学", "生物"]
 export const VERSIONS = ["人教版", "北师大版", "苏教版", "华师大版", "外研版"]
@@ -219,6 +226,34 @@ export const questions: Question[] = [
     knowledgePointIds: ["kp-1", "kp-2"],
     chapterMounts: [],
     updatedAt: "2026-06-12",
+  },
+]
+
+// 教材同步关系：人教版（tb-1） ⇄ 北师大版（tb-2），逐目录手工对应
+export const syncLinks: ChapterSyncLink[] = [
+  {
+    id: "sl-1",
+    fromTextbookId: "tb-1",
+    fromChapterId: "ch-1-1",
+    toTextbookId: "tb-2",
+    toChapterId: "bs-2-1",
+    syncTypes: ["question", "assignment"],
+  },
+  {
+    id: "sl-2",
+    fromTextbookId: "tb-1",
+    fromChapterId: "ch-1-3",
+    toTextbookId: "tb-2",
+    toChapterId: "bs-2-3",
+    syncTypes: ["question", "assignment", "microlesson"],
+  },
+  {
+    id: "sl-3",
+    fromTextbookId: "tb-1",
+    fromChapterId: "ch-2-1",
+    toTextbookId: "tb-2",
+    toChapterId: "bs-3",
+    syncTypes: ["question", "microlesson", "airclass"],
   },
 ]
 

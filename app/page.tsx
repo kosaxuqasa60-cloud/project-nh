@@ -52,11 +52,11 @@ export default function OverviewPage() {
     },
     {
       n: 4,
-      title: "换教材：章节映射批量继承",
-      desc: "换教材只做几十条「旧章节 → 新章节」对应，系统按知识点自动推荐，题目顺映射批量继承。",
+      title: "教材同步关系",
+      desc: "把两套教材的目录手工对应，并为每条对应勾选要同步的资源：题目 / 作业 / 微课 / 空中课堂。",
       icon: Replace,
       href: "/migrate",
-      action: "进入换教材映射",
+      action: "进入教材同步关系",
     },
   ]
 
@@ -137,7 +137,7 @@ export default function OverviewPage() {
           <ul className="ml-1 space-y-1.5 text-sm text-muted-foreground">
             <li>· 操作从「单题」上移到「章节 + 批量」：在章节上批量挂题，不再逐题点。</li>
             <li>· 知识点中间层：题目打一次知识点标签，即可被任意版本教材的章节自动归集。</li>
-            <li>· 换教材靠「章节映射」：只对应几十个章节节点（系统按知识点自动推荐），题目顺映射批量继承，不搬题。</li>
+            <li>· 教材间靠「同步关系」：手工把两套教材的目录两两对应，并逐条勾选要同步的资源（题目 / 作业 / 微课 / 空中课堂）。</li>
             <li>· 教材带「年份」字段，旧版本归档保留，新版本独立维护，互不影响。</li>
           </ul>
         </CardContent>
