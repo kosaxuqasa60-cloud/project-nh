@@ -68,12 +68,24 @@ export function ChapterTree({ textbookId }: { textbookId: string }) {
 
   function addRoot() {
     const order = roots.length + 1
-    addChapter({ textbookId, parentId: null, title: `第${order}章 新章节`, order })
+    addChapter({
+      textbookId,
+      parentId: null,
+      title: `第${order}章 新章节`,
+      order,
+      knowledgePointIds: [],
+    })
     toast.success("已新增一级章节")
   }
   function addChild(parentId: string) {
     const order = childrenOf(parentId).length + 1
-    addChapter({ textbookId, parentId, title: `新小节 ${order}`, order })
+    addChapter({
+      textbookId,
+      parentId,
+      title: `新小节 ${order}`,
+      order,
+      knowledgePointIds: [],
+    })
     setExpanded((p) => ({ ...p, [parentId]: true }))
     toast.success("已新增子节点")
   }
@@ -86,7 +98,7 @@ export function ChapterTree({ textbookId }: { textbookId: string }) {
       ...r,
       count: countResourcesByChapter(node.id, r.kind),
     }))
-    const kpCount = node.knowledgePointIds.length
+    const kpCount = node.knowledgePointIds?.length ?? 0
 
     return (
       <div key={node.id}>
