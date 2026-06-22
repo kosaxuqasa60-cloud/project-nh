@@ -14,6 +14,14 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import { useStore } from "@/lib/store"
 import { SYNC_RESOURCE_LABELS, SYNC_RESOURCE_TYPES, type SyncResourceType } from "@/lib/types"
@@ -24,6 +32,8 @@ const KIND_ICON: Record<SyncResourceType, typeof FileStack> = {
   microlesson: Video,
   airclass: Radio,
 }
+
+const ANY = "any"
 
 export function BatchMountSheet({
   textbookId,
@@ -36,34 +46,50 @@ export function BatchMountSheet({
   open: boolean
   onOpenChange: (v: boolean) => void
 }) {
-  const { chapters, resourcesByKind, batchMountResources, unmountResource } = useStore()
+  const { textbooks, chapters, resourcesByKind, batchMountResources } = useStore()
 
   const chapter = chapters.find((c) => c.id === chapterId)
   const [kind, setKind] = useState<SyncResourceType>("question")
   const [keyword, setKeyword] = useState("")
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  // 来源筛选：从「哪本教材的哪个目录节点」里挑资源
+  const [srcTextbook, setSrcTextbook] = useState(ANY)
+  const [srcChapter, setSrcChapter] = useState(ANY)
 
   const resources = useMemo(() => resourcesByKind(kind), [resourcesByKind, kind])
 
-  // 已挂入本章节的资源
-  const mountedList = useMemo(() => {
-    if (!chapter) return []
-    return resources.filter((r) =>
-      r.chapterMounts.some((m) => m.textbookId === textbookId && m.chapterId === chapter.id),
-    )
-  }, [chapter, resources, textbookId])
+  // 来源教材的章节列表（用于二级筛选）
+  const srcChapters = useMemo(
+    () =>
+      srcTextbook === ANY
+        ? []
+        : chapters
+            .filter((c) => c.textbookId === srcTextbook)
+            .sort((a, b) => a.order - b.order),
+    [chapters, srcTextbook],
+  )
 
-  // 可挂入（尚未挂到本章节）的资源
+  // 可挂入（尚未挂到本章节）的资源，叠加来源筛选与关键词
   const availableList = useMemo(() => {
     if (!chapter) return []
     return resources.filter((r) => {
       const notMounted = !r.chapterMounts.some(
         (m) => m.textbookId === textbookId && m.chapterId === chapter.id,
       )
+      if (!notMounted) return false
+      // 来源筛选：资源需挂在所选来源教材（及章节）下
+      if (srcTextbook !== ANY) {
+        const inSrc = r.chapterMounts.some(
+          (m) =>
+            m.textbookId === srcTextbook &&
+            (srcChapter === ANY || m.chapterId === srcChapter),
+        )
+        if (!inSrc) return false
+      }
       const matchKw = !keyword || r.title.includes(keyword)
-      return notMounted && matchKw
+      return matchKw
     })
-  }, [chapter, resources, textbookId, keyword])
+  }, [chapter, resources, textbookId, keyword, srcTextbook, srcChapter])
 
   if (!chapter) return null
 
@@ -74,6 +100,14 @@ export function BatchMountSheet({
       else next.add(id)
       return next
     })
+
+  const allChecked = availableList.length > 0 && availableList.every((r) => selected.has(r.id))
+  function toggleAll() {
+    setSelected((prev) => {
+      if (allChecked) return new Set()
+      return new Set(availableList.map((r) => r.id))
+    })
+  }
 
   function switchKind(k: SyncResourceType) {
     setKind(k)
@@ -87,8 +121,15 @@ export function BatchMountSheet({
       return
     }
     batchMountResources(kind, textbookId, chapter!.id, Array.from(selected))
-    toast.success(`已挂入 ${selected.size} 个${SYNC_RESOURCE_LABELS[kind]}`)
+    toast.success(`已挂入 ${selected.size} 个${SYNC_RESOURCE_LABELS[kind]}`, {
+      description: "可在教材详情「已挂载资源」中查看或移出",
+    })
     setSelected(new Set())
+  }
+
+  const tbName = (id: string) => {
+    const t = textbooks.find((x) => x.id === id)
+    return t ? `${t.version} ${t.subject}${t.grade}（${t.year}）` : "—"
   }
 
   return (
@@ -97,7 +138,8 @@ export function BatchMountSheet({
         <SheetHeader className="border-b border-border px-6 py-4">
           <SheetTitle className="text-base">批量挂载资源</SheetTitle>
           <SheetDescription>
-            将选中的资源批量挂载到目录节点：
+            挂入目标：<span className="font-medium text-foreground">{tbName(textbookId)}</span>
+            {" / "}
             <span className="font-medium text-foreground">{chapter.title}</span>
           </SheetDescription>
         </SheetHeader>
@@ -125,87 +167,106 @@ export function BatchMountSheet({
           })}
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
-          {/* 已挂载到本节的资源 */}
-          {mountedList.length > 0 && (
-            <section className="mb-5 space-y-2">
-              <h3 className="text-sm font-medium">
-                本节已挂载的{SYNC_RESOURCE_LABELS[kind]}（{mountedList.length}）
-              </h3>
-              <div className="space-y-1.5">
-                {mountedList.map((r) => (
-                  <div
-                    key={r.id}
-                    className="flex items-center gap-3 rounded-md border border-border bg-muted/30 p-2.5"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm text-foreground/90">{r.title}</p>
-                      {r.subtitle && (
-                        <span className="text-xs text-muted-foreground">{r.subtitle}</span>
-                      )}
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 text-xs text-destructive hover:text-destructive"
-                      onClick={() => {
-                        unmountResource(kind, r.id, textbookId, chapter.id)
-                        toast.success("已移出本节")
-                      }}
-                    >
-                      移出
-                    </Button>
-                  </div>
+        {/* 来源筛选 */}
+        <div className="flex flex-wrap items-end gap-3 border-b border-border bg-muted/20 px-6 py-3">
+          <div className="grid gap-1.5">
+            <Label className="text-xs text-muted-foreground">来源教材</Label>
+            <Select
+              value={srcTextbook}
+              onValueChange={(v) => {
+                setSrcTextbook(v)
+                setSrcChapter(ANY)
+              }}
+              items={{
+                [ANY]: "全部教材",
+                ...Object.fromEntries(textbooks.map((t) => [t.id, tbName(t.id)])),
+              }}
+            >
+              <SelectTrigger className="h-9 w-[200px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ANY}>全部教材</SelectItem>
+                {textbooks.map((t) => (
+                  <SelectItem key={t.id} value={t.id}>
+                    {tbName(t.id)}
+                  </SelectItem>
                 ))}
-              </div>
-            </section>
-          )}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid gap-1.5">
+            <Label className="text-xs text-muted-foreground">来源目录节点</Label>
+            <Select
+              value={srcChapter}
+              onValueChange={setSrcChapter}
+              disabled={srcTextbook === ANY}
+              items={{
+                [ANY]: "全部目录",
+                ...Object.fromEntries(srcChapters.map((c) => [c.id, c.title])),
+              }}
+            >
+              <SelectTrigger className="h-9 w-[200px]">
+                <SelectValue placeholder="先选来源教材" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ANY}>全部目录</SelectItem>
+                {srcChapters.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.title}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
 
-          {/* 选择资源挂入本节 */}
-          <section className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-medium">选择{SYNC_RESOURCE_LABELS[kind]}挂入本节</h3>
-              <Input
-                value={keyword}
-                onChange={(e) => setKeyword(e.target.value)}
-                placeholder="搜索标题…"
-                className="h-8 w-44"
-              />
-            </div>
-            <div className="space-y-1.5">
-              {availableList.map((r) => {
-                const checked = selected.has(r.id)
-                return (
-                  <label
-                    key={r.id}
-                    className={cn(
-                      "flex cursor-pointer items-start gap-3 rounded-md border p-3 transition-colors",
-                      checked ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50",
-                    )}
-                  >
-                    <Checkbox
-                      checked={checked}
-                      onCheckedChange={() => toggle(r.id)}
-                      className="mt-0.5"
-                    />
-                    <div className="min-w-0 flex-1 space-y-1">
-                      <p className="text-sm leading-snug text-foreground/90">{r.title}</p>
-                      {r.subtitle && (
-                        <Badge variant="secondary" className="font-normal">
-                          {r.subtitle}
-                        </Badge>
-                      )}
-                    </div>
-                  </label>
-                )
-              })}
-              {availableList.length === 0 && (
-                <p className="py-8 text-center text-sm text-muted-foreground">
-                  没有可挂入的{SYNC_RESOURCE_LABELS[kind]}。
-                </p>
-              )}
-            </div>
-          </section>
+        {/* 选择资源挂入 */}
+        <div className="flex items-center justify-between gap-3 border-b border-border px-6 py-2.5">
+          <label className="flex cursor-pointer items-center gap-2 text-sm">
+            <Checkbox checked={allChecked} onCheckedChange={toggleAll} />
+            全选当前 {availableList.length} 项
+          </label>
+          <Input
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+            placeholder="搜索标题…"
+            className="h-8 w-44"
+          />
+        </div>
+
+        <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto px-6 py-4">
+          {availableList.map((r) => {
+            const checked = selected.has(r.id)
+            return (
+              <label
+                key={r.id}
+                className={cn(
+                  "flex cursor-pointer items-start gap-3 rounded-md border p-3 transition-colors",
+                  checked ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50",
+                )}
+              >
+                <Checkbox
+                  checked={checked}
+                  onCheckedChange={() => toggle(r.id)}
+                  className="mt-0.5"
+                />
+                <div className="min-w-0 flex-1 space-y-1">
+                  <p className="text-sm leading-snug text-foreground/90">{r.title}</p>
+                  {r.subtitle && (
+                    <Badge variant="secondary" className="font-normal">
+                      {r.subtitle}
+                    </Badge>
+                  )}
+                </div>
+              </label>
+            )
+          })}
+          {availableList.length === 0 && (
+            <p className="py-10 text-center text-sm text-muted-foreground">
+              没有可挂入的{SYNC_RESOURCE_LABELS[kind]}，试试调整来源筛选或关键词。
+            </p>
+          )}
         </div>
 
         <div className="flex items-center justify-between border-t border-border px-6 py-4">

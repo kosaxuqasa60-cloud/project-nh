@@ -20,7 +20,7 @@ export const VOLUME_LABELS: Record<Volume, string> = {
 export const STATUS_LABELS: Record<TextbookStatus, string> = {
   draft: "草稿",
   published: "已发布",
-  archived: "已归档",
+  archived: "已下架",
 }
 
 export interface Textbook {

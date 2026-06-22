@@ -2,13 +2,32 @@
 
 import { useMemo, useState } from "react"
 import Link from "next/link"
-import { BookOpen, ChevronRight, FileStack, Plus } from "lucide-react"
+import {
+  ArrowDownToLine,
+  ArrowUpToLine,
+  BookOpen,
+  FileStack,
+  ListTree,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  Send,
+} from "lucide-react"
+import { toast } from "sonner"
 import { PageHeader } from "@/components/admin/page-header"
 import { StatusBadge } from "@/components/admin/status-badge"
 import { TextbookFormDialog } from "@/components/admin/textbook-form-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Label } from "@/components/ui/label"
 import {
   Select,
   SelectContent,
@@ -26,16 +45,17 @@ import {
 } from "@/components/ui/table"
 import { SUBJECTS, VERSIONS } from "@/lib/mock-data"
 import { useStore } from "@/lib/store"
-import { STAGE_LABELS, VOLUME_LABELS } from "@/lib/types"
+import { STAGE_LABELS, VOLUME_LABELS, type Textbook } from "@/lib/types"
 
 const ALL = "all"
 
 export default function TextbooksPage() {
-  const { textbooks, countQuestionsByTextbook } = useStore()
+  const { textbooks, countQuestionsByTextbook, updateTextbook } = useStore()
   const [subject, setSubject] = useState(ALL)
   const [version, setVersion] = useState(ALL)
   const [year, setYear] = useState(ALL)
   const [status, setStatus] = useState(ALL)
+  const [editing, setEditing] = useState<Textbook | null>(null)
 
   const years = useMemo(
     () => Array.from(new Set(textbooks.map((t) => t.year))).sort((a, b) => b - a),
@@ -50,11 +70,20 @@ export default function TextbooksPage() {
       (status === ALL || t.status === status),
   )
 
+  function publish(t: Textbook) {
+    updateTextbook(t.id, { status: "published" })
+    toast.success(`《${t.name}》已发布`)
+  }
+  function takeDown(t: Textbook) {
+    updateTextbook(t.id, { status: "archived" })
+    toast.success(`《${t.name}》已下架`)
+  }
+
   return (
     <div>
       <PageHeader
         title="教材管理"
-        description="维护各版本教材。题目与作业以多对多方式挂载到教材章节，同一道题可同时归属多个教材。"
+        description="维护各版本教材。题目、作业、微课、空中课堂以多对多方式挂载到教材章节，同一资源可同时归属多个教材。"
         actions={
           <TextbookFormDialog
             trigger={
@@ -66,28 +95,47 @@ export default function TextbooksPage() {
         }
       />
 
-      <Card className="mb-4 flex flex-wrap items-center gap-3 p-4">
-        <FilterSelect label="学科" value={subject} onChange={setSubject} options={SUBJECTS} />
-        <FilterSelect label="版本" value={version} onChange={setVersion} options={VERSIONS} />
-        <FilterSelect
-          label="年份"
-          value={year}
-          onChange={setYear}
-          options={years.map(String)}
-          render={(y) => `${y} 年`}
-        />
-        <FilterSelect
-          label="状态"
-          value={status}
-          onChange={setStatus}
-          options={["published", "draft", "archived"]}
-          render={(s) =>
-            ({ published: "已发布", draft: "草稿", archived: "已归档" })[s] ?? s
-          }
-        />
-        <span className="ml-auto text-sm text-muted-foreground">
-          共 {filtered.length} 套教材
-        </span>
+      {/* 横排筛选 */}
+      <Card className="mb-4 p-4">
+        <div className="flex flex-wrap items-end gap-4">
+          <FilterSelect label="学科" value={subject} onChange={setSubject} options={SUBJECTS} />
+          <FilterSelect label="版本" value={version} onChange={setVersion} options={VERSIONS} />
+          <FilterSelect
+            label="年份"
+            value={year}
+            onChange={setYear}
+            options={years.map(String)}
+            render={(y) => `${y} 年`}
+          />
+          <FilterSelect
+            label="状态"
+            value={status}
+            onChange={setStatus}
+            options={["published", "draft", "archived"]}
+            render={(s) =>
+              ({ published: "已发布", draft: "草稿", archived: "已下架" })[s] ?? s
+            }
+          />
+          <div className="ml-auto flex items-center gap-3 pb-2">
+            {(subject !== ALL || version !== ALL || year !== ALL || status !== ALL) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setSubject(ALL)
+                  setVersion(ALL)
+                  setYear(ALL)
+                  setStatus(ALL)
+                }}
+              >
+                重置
+              </Button>
+            )}
+            <span className="text-sm text-muted-foreground">
+              共 <span className="font-medium text-foreground">{filtered.length}</span> 套教材
+            </span>
+          </div>
+        </div>
       </Card>
 
       <Card className="p-0">
@@ -100,9 +148,9 @@ export default function TextbooksPage() {
               <TableHead>学段 / 年级 / 册次</TableHead>
               <TableHead>版本</TableHead>
               <TableHead>年份</TableHead>
-              <TableHead>题目数</TableHead>
+              <TableHead>资源数</TableHead>
               <TableHead>状态</TableHead>
-              <TableHead className="text-right pr-5">操作</TableHead>
+              <TableHead className="pr-5 text-right">操作</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -152,13 +200,50 @@ export default function TextbooksPage() {
                   <StatusBadge status={t.status} />
                 </TableCell>
                 <TableCell className="pr-5 text-right">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    render={<Link href={`/textbooks/${t.id}`} />}
-                  >
-                    配置目录 <ChevronRight className="size-4" />
-                  </Button>
+                  <div className="flex items-center justify-end gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      render={<Link href={`/textbooks/${t.id}`} />}
+                    >
+                      <ListTree className="size-4" /> 配置目录
+                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        render={
+                          <Button variant="ghost" size="icon" className="size-8">
+                            <MoreHorizontal className="size-4" />
+                            <span className="sr-only">更多操作</span>
+                          </Button>
+                        }
+                      />
+                      <DropdownMenuContent align="end" className="w-40">
+                        <DropdownMenuItem onClick={() => setEditing(t)}>
+                          <Pencil className="size-4" /> 编辑信息
+                        </DropdownMenuItem>
+                        <DropdownMenuItem render={<Link href={`/textbooks/${t.id}`} />}>
+                          <ListTree className="size-4" /> 配置目录
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        {t.status === "published" ? (
+                          <DropdownMenuItem
+                            className="text-destructive"
+                            onClick={() => takeDown(t)}
+                          >
+                            <ArrowDownToLine className="size-4" /> 下架
+                          </DropdownMenuItem>
+                        ) : t.status === "archived" ? (
+                          <DropdownMenuItem onClick={() => publish(t)}>
+                            <ArrowUpToLine className="size-4" /> 重新上架
+                          </DropdownMenuItem>
+                        ) : (
+                          <DropdownMenuItem onClick={() => publish(t)}>
+                            <Send className="size-4" /> 发布
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
@@ -172,6 +257,15 @@ export default function TextbooksPage() {
           </TableBody>
         </Table>
       </Card>
+
+      {/* 编辑基础信息（受控） */}
+      {editing && (
+        <TextbookFormDialog
+          textbook={editing}
+          open={Boolean(editing)}
+          onOpenChange={(v) => !v && setEditing(null)}
+        />
+      )}
     </div>
   )
 }
@@ -194,10 +288,10 @@ function FilterSelect({
     ...Object.fromEntries(options.map((o) => [o, render ? render(o) : o])),
   }
   return (
-    <div className="flex items-center gap-2">
-      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+    <div className="grid gap-1.5">
+      <Label className="text-xs font-medium text-muted-foreground">{label}</Label>
       <Select value={value} onValueChange={onChange} items={items}>
-        <SelectTrigger className="h-9 w-[130px]">
+        <SelectTrigger className="h-9 w-[160px]">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>

@@ -28,6 +28,7 @@ import {
   STAGE_LABELS,
   VOLUME_LABELS,
   type Stage,
+  type Textbook,
   type Volume,
 } from "@/lib/types"
 
@@ -35,17 +36,33 @@ const CURRENT_YEAR = 2026
 const YEARS = Array.from({ length: 9 }, (_, i) => CURRENT_YEAR - i)
 const YEAR_ITEMS = Object.fromEntries(YEARS.map((y) => [String(y), `${y} 年`]))
 
-export function TextbookFormDialog({ trigger }: { trigger: React.ReactNode }) {
-  const { addTextbook } = useStore()
-  const [open, setOpen] = useState(false)
-  const [subject, setSubject] = useState("数学")
-  const [version, setVersion] = useState("人教版")
-  const [stage, setStage] = useState<Stage>("junior")
-  const [grade, setGrade] = useState("七年级")
-  const [volume, setVolume] = useState<Volume>("upper")
-  const [year, setYear] = useState(String(CURRENT_YEAR))
-  const [name, setName] = useState("")
-  const [cover, setCover] = useState<string>("")
+export function TextbookFormDialog({
+  trigger,
+  textbook,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
+}: {
+  trigger?: React.ReactNode
+  // 传入则为「编辑基础信息」模式，否则为「新建」模式
+  textbook?: Textbook
+  open?: boolean
+  onOpenChange?: (v: boolean) => void
+}) {
+  const { addTextbook, updateTextbook } = useStore()
+  const isEdit = Boolean(textbook)
+
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
+  const open = controlledOpen ?? uncontrolledOpen
+  const setOpen = controlledOnOpenChange ?? setUncontrolledOpen
+
+  const [subject, setSubject] = useState(textbook?.subject ?? "数学")
+  const [version, setVersion] = useState(textbook?.version ?? "人教版")
+  const [stage, setStage] = useState<Stage>(textbook?.stage ?? "junior")
+  const [grade, setGrade] = useState(textbook?.grade ?? "七年级")
+  const [volume, setVolume] = useState<Volume>(textbook?.volume ?? "upper")
+  const [year, setYear] = useState(String(textbook?.year ?? CURRENT_YEAR))
+  const [name, setName] = useState(textbook?.name ?? "")
+  const [cover, setCover] = useState<string>(textbook?.cover ?? "")
   const fileRef = useRef<HTMLInputElement>(null)
 
   function handleCoverPick(e: React.ChangeEvent<HTMLInputElement>) {
@@ -61,7 +78,7 @@ export function TextbookFormDialog({ trigger }: { trigger: React.ReactNode }) {
       toast.error("请填写教材名称")
       return
     }
-    addTextbook({
+    const payload = {
       name: name.trim(),
       subject,
       version,
@@ -69,25 +86,32 @@ export function TextbookFormDialog({ trigger }: { trigger: React.ReactNode }) {
       grade,
       volume,
       year: Number(year),
-      status: "draft",
       cover: cover || undefined,
-    })
-    toast.success("教材已创建（草稿）", {
-      description: "可在教材详情中继续编辑章节目录",
-    })
+    }
+    if (isEdit && textbook) {
+      updateTextbook(textbook.id, payload)
+      toast.success("基础信息已更新")
+    } else {
+      addTextbook({ ...payload, status: "draft" })
+      toast.success("教材已创建（草稿）", {
+        description: "可在教材详情中继续编辑章节目录",
+      })
+      setName("")
+      setCover("")
+    }
     setOpen(false)
-    setName("")
-    setCover("")
   }
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={trigger as React.ReactElement} />
+      {trigger && <DialogTrigger render={trigger as React.ReactElement} />}
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>新建教材</DialogTitle>
+          <DialogTitle>{isEdit ? "编辑基础信息" : "新建教材"}</DialogTitle>
           <DialogDescription>
-            教材是题目与作业挂载的载体。先确定基础信息，创建后再编辑章节目录。
+            {isEdit
+              ? "修改教材的封面与基础信息，章节目录请在「配置目录」中维护。"
+              : "教材是题目与作业挂载的载体。先确定基础信息，创建后再编辑章节目录。"}
           </DialogDescription>
         </DialogHeader>
 
@@ -208,7 +232,7 @@ export function TextbookFormDialog({ trigger }: { trigger: React.ReactNode }) {
           <Button variant="outline" onClick={() => setOpen(false)}>
             取消
           </Button>
-          <Button onClick={handleSubmit}>创建教材</Button>
+          <Button onClick={handleSubmit}>{isEdit ? "保存修改" : "创建教材"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

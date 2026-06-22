@@ -4,17 +4,17 @@ import Link from "next/link"
 import { useParams } from "next/navigation"
 import { ArrowLeft, BookOpen, FileStack, ListTree } from "lucide-react"
 import { ChapterTree } from "@/components/admin/chapter-tree"
+import { MountedResourcesPanel } from "@/components/admin/mounted-resources-panel"
 import { StatusBadge } from "@/components/admin/status-badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Badge } from "@/components/ui/badge"
 import { useStore } from "@/lib/store"
 import { STAGE_LABELS, VOLUME_LABELS } from "@/lib/types"
 
 export default function TextbookDetailPage() {
   const params = useParams<{ id: string }>()
-  const { textbooks, chapters, questions, countQuestionsByTextbook } = useStore()
+  const { textbooks, chapters, countQuestionsByTextbook } = useStore()
   const tb = textbooks.find((t) => t.id === params.id)
 
   if (!tb) {
@@ -31,9 +31,6 @@ export default function TextbookDetailPage() {
   }
 
   const chapterCount = chapters.filter((c) => c.textbookId === tb.id).length
-  const mountedQuestions = questions.filter((q) =>
-    q.chapterMounts.some((m) => m.textbookId === tb.id),
-  )
 
   const meta = [
     ["学科", tb.subject],
@@ -98,7 +95,7 @@ export default function TextbookDetailPage() {
       <Tabs defaultValue="chapters">
         <TabsList>
           <TabsTrigger value="chapters">章节目录</TabsTrigger>
-          <TabsTrigger value="questions">已挂载题目</TabsTrigger>
+          <TabsTrigger value="resources">已挂载资源</TabsTrigger>
         </TabsList>
 
         <TabsContent value="chapters" className="mt-4">
@@ -112,43 +109,16 @@ export default function TextbookDetailPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="questions" className="mt-4">
+        <TabsContent value="resources" className="mt-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">
-                挂载在本教材的题目（{mountedQuestions.length}）
-              </CardTitle>
+              <CardTitle className="text-base">已挂载资源</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                按资源类型查看挂载在本教材各章节的题目 / 作业 / 微课 / 空中课堂，可单个或批量移出。
+              </p>
             </CardHeader>
-            <CardContent className="space-y-2">
-              {mountedQuestions.map((q) => {
-                const chapterId = q.chapterMounts.find((m) => m.textbookId === tb.id)?.chapterId
-                const chapter = chapters.find((c) => c.id === chapterId)
-                const otherCount = q.chapterMounts.filter((m) => m.textbookId !== tb.id).length
-                return (
-                  <div
-                    key={q.id}
-                    className="flex items-start gap-3 rounded-md border border-border p-3"
-                  >
-                    <Badge variant="secondary" className="mt-0.5 shrink-0 font-normal">
-                      {chapter?.title ?? "未归类"}
-                    </Badge>
-                    <p className="flex-1 text-sm text-foreground/90">{q.stem}</p>
-                    {otherCount > 0 && (
-                      <Badge
-                        variant="outline"
-                        className="shrink-0 border-chart-2/30 bg-chart-2/10 text-chart-2"
-                      >
-                        另挂 {otherCount} 个教材
-                      </Badge>
-                    )}
-                  </div>
-                )
-              })}
-              {mountedQuestions.length === 0 && (
-                <p className="py-10 text-center text-sm text-muted-foreground">
-                  暂无挂载题目，可在题库管理中将题目挂载到本教材章节。
-                </p>
-              )}
+            <CardContent>
+              <MountedResourcesPanel textbookId={tb.id} />
             </CardContent>
           </Card>
         </TabsContent>

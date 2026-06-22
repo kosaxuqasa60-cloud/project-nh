@@ -198,7 +198,7 @@ export function ChapterTree({ textbookId }: { textbookId: string }) {
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          点击节点名称可重命名。悬停节点点「批量挂载」，可按知识点一键归集或勾选挂入题目 / 作业 / 微课 / 空中课堂。
+          点击节点名称可重命名。悬停节点点「批量挂载」勾选挂入题目 / 作业 / 微课 / 空中课堂；查看与移出已挂载资源请到上方「已挂载资源」页。
         </p>
         <div className="flex items-center gap-2">
           <ChapterImportDialog textbookId={textbookId} />
