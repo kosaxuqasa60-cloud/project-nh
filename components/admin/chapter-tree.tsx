@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { BatchMountSheet } from "@/components/admin/batch-mount-sheet"
+import { ChapterImportDialog } from "@/components/admin/chapter-import-dialog"
 import { useStore } from "@/lib/store"
 import { SYNC_RESOURCE_LABELS, type ChapterNode, type SyncResourceType } from "@/lib/types"
 
@@ -199,9 +200,12 @@ export function ChapterTree({ textbookId }: { textbookId: string }) {
         <p className="text-sm text-muted-foreground">
           点击节点名称可重命名。悬停节点点「批量挂载」，可按知识点一键归集或勾选挂入题目 / 作业 / 微课 / 空中课堂。
         </p>
-        <Button variant="outline" size="sm" onClick={addRoot}>
-          <Plus className="size-4" /> 新增章
-        </Button>
+        <div className="flex items-center gap-2">
+          <ChapterImportDialog textbookId={textbookId} />
+          <Button variant="outline" size="sm" onClick={addRoot}>
+            <Plus className="size-4" /> 新增章
+          </Button>
+        </div>
       </div>
       <div className="rounded-lg border border-border p-2">
         {roots.length > 0 ? (

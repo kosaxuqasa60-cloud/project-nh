@@ -57,9 +57,18 @@ export default function TextbookDetailPage() {
       <Card className="mb-6">
         <CardContent className="flex flex-col gap-4 pt-6 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex gap-4">
-            <div className="flex size-14 shrink-0 items-center justify-center rounded-lg bg-accent text-accent-foreground">
-              <BookOpen className="size-7" />
-            </div>
+            {tb.cover ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={tb.cover || "/placeholder.svg"}
+                alt={`${tb.name} 封面`}
+                className="aspect-[3/4] w-14 shrink-0 rounded-lg border border-border object-cover"
+              />
+            ) : (
+              <div className="flex size-14 shrink-0 items-center justify-center rounded-lg bg-accent text-accent-foreground">
+                <BookOpen className="size-7" />
+              </div>
+            )}
             <div className="space-y-2">
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-balance text-xl font-semibold">{tb.name}</h1>

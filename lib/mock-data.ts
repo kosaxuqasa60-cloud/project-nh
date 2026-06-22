@@ -24,6 +24,7 @@ export const textbooks: Textbook[] = [
     version: "人教版",
     year: 2024,
     status: "published",
+    cover: "/covers/math.png",
     updatedAt: "2026-05-12",
   },
   {
@@ -36,6 +37,7 @@ export const textbooks: Textbook[] = [
     version: "北师大版",
     year: 2024,
     status: "published",
+    cover: "/covers/math.png",
     updatedAt: "2026-04-28",
   },
   {
@@ -48,6 +50,7 @@ export const textbooks: Textbook[] = [
     version: "人教版",
     year: 2019,
     status: "archived",
+    cover: "/covers/math.png",
     updatedAt: "2025-09-01",
   },
   {
@@ -60,6 +63,7 @@ export const textbooks: Textbook[] = [
     version: "人教版",
     year: 2024,
     status: "published",
+    cover: "/covers/chinese.png",
     updatedAt: "2026-03-15",
   },
   {
@@ -72,6 +76,7 @@ export const textbooks: Textbook[] = [
     version: "人教版",
     year: 2025,
     status: "draft",
+    cover: "/covers/physics.png",
     updatedAt: "2026-06-10",
   },
 ]
@@ -110,6 +115,12 @@ export const chapters: ChapterNode[] = [
   { id: "bs-2-3", textbookId: "tb-2", parentId: "bs-2", title: "2.3 有理数的加减法", order: 3, knowledgePointIds: ["kp-3"] },
   { id: "bs-2-4", textbookId: "tb-2", parentId: "bs-2", title: "2.4 有理数的乘除法", order: 4, knowledgePointIds: ["kp-4"] },
   { id: "bs-3", textbookId: "tb-2", parentId: null, title: "第三章 整式及其加减", order: 3, knowledgePointIds: ["kp-5", "kp-6"] },
+  // 2019 旧人教版数学七上（tb-3）
+  { id: "old-1", textbookId: "tb-3", parentId: null, title: "第一章 有理数", order: 1, knowledgePointIds: [] },
+  { id: "old-1-1", textbookId: "tb-3", parentId: "old-1", title: "1.1 正数和负数", order: 1, knowledgePointIds: ["kp-1"] },
+  { id: "old-1-2", textbookId: "tb-3", parentId: "old-1", title: "1.2 有理数", order: 2, knowledgePointIds: ["kp-2"] },
+  { id: "old-2", textbookId: "tb-3", parentId: null, title: "第二章 整式的加减", order: 2, knowledgePointIds: [] },
+  { id: "old-2-1", textbookId: "tb-3", parentId: "old-2", title: "2.1 整式", order: 1, knowledgePointIds: ["kp-5"] },
 ]
 
 // 题目：打知识点标签，章节锚点可由知识点自动归集
@@ -250,14 +261,31 @@ export const syncLinks: ChapterSyncLink[] = [
     syncTypes: ["question", "assignment", "microlesson"],
   },
   {
-    id: "sl-3",
-    fromTextbookId: "tb-1",
-    fromChapterId: "ch-2-1",
-    toTextbookId: "tb-2",
-    toChapterId: "bs-3",
-    syncTypes: ["question", "microlesson", "airclass"],
+  id: "sl-3",
+  fromTextbookId: "tb-1",
+  fromChapterId: "ch-2-1",
+  toTextbookId: "tb-2",
+  toChapterId: "bs-3",
+  syncTypes: ["question", "microlesson", "airclass"],
   },
-]
+  // tb-1 同时同步到 tb-3（一对多：同一主教材 → 多套目标教材）
+  {
+  id: "sl-4",
+  fromTextbookId: "tb-1",
+  fromChapterId: "ch-1-1",
+  toTextbookId: "tb-3",
+  toChapterId: "old-1-1",
+  syncTypes: ["question", "assignment"],
+  },
+  {
+  id: "sl-5",
+  fromTextbookId: "tb-1",
+  fromChapterId: "ch-2-1",
+  toTextbookId: "tb-3",
+  toChapterId: "old-2-1",
+  syncTypes: ["question"],
+  },
+  ]
 
 export const assignments: Assignment[] = [
   {

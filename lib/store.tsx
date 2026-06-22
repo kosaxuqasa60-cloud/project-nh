@@ -39,6 +39,12 @@ interface StoreValue {
   addChapter: (c: Omit<ChapterNode, "id">) => void
   updateChapter: (id: string, patch: Partial<ChapterNode>) => void
   removeChapter: (id: string) => void
+  // 批量导入章节目录：rows 为 { level, title }，level=1 为章、2 为节、3 为子目，replace 表示清空原目录后导入
+  importChapters: (
+    textbookId: string,
+    rows: { level: number; title: string }[],
+    replace: boolean,
+  ) => number
   // 知识点
   addKnowledgePoint: (kp: Omit<KnowledgePoint, "id">) => void
   setChapterKnowledgePoints: (chapterId: string, kpIds: string[]) => void
@@ -138,6 +144,39 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setChapters((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c))),
       removeChapter: (id) =>
         setChapters((prev) => prev.filter((c) => c.id !== id && c.parentId !== id)),
+
+      importChapters: (textbookId, rows, replace) => {
+        const created: ChapterNode[] = []
+        // 各层级最近一个父节点，用于把 level 转成 parentId
+        const lastByLevel: Record<number, string> = {}
+        // 各父节点下的排序计数
+        const orderByParent: Record<string, number> = {}
+        rows.forEach((row) => {
+          const level = Math.max(1, Math.min(3, row.level))
+          const parentId = level === 1 ? null : lastByLevel[level - 1] ?? null
+          const pk = parentId ?? "root"
+          orderByParent[pk] = (orderByParent[pk] ?? 0) + 1
+          const id = nextId("ch")
+          created.push({
+            id,
+            textbookId,
+            parentId,
+            title: row.title,
+            order: orderByParent[pk],
+            knowledgePointIds: [],
+          })
+          lastByLevel[level] = id
+          // 进入更深层级时，清除更深的缓存
+          for (let l = level + 1; l <= 3; l++) delete lastByLevel[l]
+        })
+        setChapters((prev) => {
+          const kept = replace
+            ? prev.filter((c) => c.textbookId !== textbookId)
+            : prev
+          return [...kept, ...created]
+        })
+        return created.length
+      },
 
       addKnowledgePoint: (kp) =>
         setKnowledgePoints((prev) => [...prev, { ...kp, id: nextId("kp") }]),

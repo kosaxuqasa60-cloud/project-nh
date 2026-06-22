@@ -2,28 +2,14 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import {
-  BookOpen,
-  FileStack,
-  LayoutDashboard,
-  ListTree,
-  PenLine,
-  Search,
-  Tags,
-  Replace,
-} from "lucide-react"
+import { BookOpen, PenLine, Replace, Search } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Input } from "@/components/ui/input"
 
 const NAV = [
-  { href: "/", label: "流程总览", icon: LayoutDashboard },
   { href: "/textbooks", label: "教材管理", icon: BookOpen },
-  { href: "/knowledge-points", label: "知识点体系", icon: Tags },
-  { href: "/chapters", label: "章节目录", icon: ListTree },
-  { href: "/questions", label: "题库管理", icon: FileStack },
   { href: "/migrate", label: "教材同步关系", icon: Replace },
-  { href: "/assignments", label: "作业管理", icon: PenLine },
 ]
 
 export function AdminShell({ children }: { children: React.ReactNode }) {

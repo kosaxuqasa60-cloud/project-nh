@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react"
 import Link from "next/link"
-import { ChevronRight, FileStack, Plus } from "lucide-react"
+import { BookOpen, ChevronRight, FileStack, Plus } from "lucide-react"
 import { PageHeader } from "@/components/admin/page-header"
 import { StatusBadge } from "@/components/admin/status-badge"
 import { TextbookFormDialog } from "@/components/admin/textbook-form-dialog"
@@ -94,7 +94,8 @@ export default function TextbooksPage() {
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/40 hover:bg-muted/40">
-              <TableHead className="pl-5">教材名称</TableHead>
+              <TableHead className="w-16 pl-5">封面</TableHead>
+              <TableHead>教材名称</TableHead>
               <TableHead>学科</TableHead>
               <TableHead>学段 / 年级 / 册次</TableHead>
               <TableHead>版本</TableHead>
@@ -107,7 +108,23 @@ export default function TextbooksPage() {
           <TableBody>
             {filtered.map((t) => (
               <TableRow key={t.id} className="group">
-                <TableCell className="max-w-xs pl-5">
+                <TableCell className="pl-5">
+                  <Link href={`/textbooks/${t.id}`} className="block">
+                    {t.cover ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={t.cover || "/placeholder.svg"}
+                        alt={`${t.name} 封面`}
+                        className="aspect-[3/4] w-10 rounded border border-border object-cover"
+                      />
+                    ) : (
+                      <div className="flex aspect-[3/4] w-10 items-center justify-center rounded border border-border bg-muted text-muted-foreground">
+                        <BookOpen className="size-4" />
+                      </div>
+                    )}
+                  </Link>
+                </TableCell>
+                <TableCell className="max-w-xs">
                   <Link
                     href={`/textbooks/${t.id}`}
                     className="font-medium text-foreground hover:text-primary"
@@ -147,7 +164,7 @@ export default function TextbooksPage() {
             ))}
             {filtered.length === 0 && (
               <TableRow>
-                <TableCell colSpan={8} className="py-16 text-center text-muted-foreground">
+                <TableCell colSpan={9} className="py-16 text-center text-muted-foreground">
                   没有符合条件的教材
                 </TableCell>
               </TableRow>

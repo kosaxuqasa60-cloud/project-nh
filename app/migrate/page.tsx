@@ -4,7 +4,7 @@ import { useMemo, useState } from "react"
 import { toast } from "sonner"
 import {
   ArrowLeft,
-  ArrowLeftRight,
+  ArrowRight,
   BookOpen,
   ChevronRight,
   Link2,
@@ -35,6 +35,7 @@ import { useStore } from "@/lib/store"
 import {
   SYNC_RESOURCE_LABELS,
   SYNC_RESOURCE_TYPES,
+  type ChapterNode,
   type ChapterSyncLink,
   type SyncResourceType,
   type Textbook,
@@ -42,54 +43,48 @@ import {
 
 const NONE = "__none__"
 
-// 教材对的归一化 key（无方向性）
-function pairKey(a: string, b: string) {
-  return [a, b].sort().join("__")
-}
-
 export default function SyncMappingPage() {
   const { textbooks, chapters, syncLinks, addSyncLink, updateSyncLinkTypes, removeSyncLink } =
     useStore()
 
-  // null = 教材对列表视图；否则为某教材对的详情视图 [tbA, tbB]
-  const [activePair, setActivePair] = useState<[string, string] | null>(null)
+  // null = 主教材列表视图；否则为某主教材的详情视图（fromTextbookId）
+  const [activeSource, setActiveSource] = useState<string | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
 
   const tbLabel = (t?: Textbook) =>
     t ? `${t.version} · ${t.subject}${t.grade}（${t.year}）` : "—"
   const tbName = (id: string) => {
     const t = textbooks.find((x) => x.id === id)
-    return t ? `${t.version} ${t.subject}${t.grade}` : "—"
+    return t ? `${t.version} ${t.subject}${t.grade}（${t.year}）` : "—"
   }
   const tbItems = Object.fromEntries(textbooks.map((t) => [t.id, tbLabel(t)]))
   const chapterTitle = (id: string) => chapters.find((c) => c.id === id)?.title ?? "—"
   const chaptersOf = (tbId: string) => chapters.filter((c) => c.textbookId === tbId)
 
-  // 把同步关系按教材对聚合
-  const pairs = useMemo(() => {
-    const map = new Map<
-      string,
-      { tbA: string; tbB: string; links: ChapterSyncLink[] }
-    >()
+  // 按主教材（fromTextbookId）聚合：一个主教材 → 多套目标教材
+  const sources = useMemo(() => {
+    const map = new Map<string, ChapterSyncLink[]>()
     for (const l of syncLinks) {
-      const key = pairKey(l.fromTextbookId, l.toTextbookId)
-      const [tbA, tbB] = [l.fromTextbookId, l.toTextbookId].sort()
-      if (!map.has(key)) map.set(key, { tbA, tbB, links: [] })
-      map.get(key)!.links.push(l)
+      if (!map.has(l.fromTextbookId)) map.set(l.fromTextbookId, [])
+      map.get(l.fromTextbookId)!.push(l)
     }
-    return Array.from(map.values())
+    return Array.from(map.entries()).map(([fromTextbookId, links]) => ({
+      fromTextbookId,
+      links,
+      targetIds: Array.from(new Set(links.map((l) => l.toTextbookId))),
+    }))
   }, [syncLinks])
 
-  // 当前教材对详情数据
-  const activePairData = useMemo(() => {
-    if (!activePair) return null
-    const key = pairKey(activePair[0], activePair[1])
-    return pairs.find((p) => pairKey(p.tbA, p.tbB) === key) ?? {
-      tbA: activePair[0],
-      tbB: activePair[1],
-      links: [],
-    }
-  }, [activePair, pairs])
+  const activeSourceData = useMemo(() => {
+    if (!activeSource) return null
+    return (
+      sources.find((s) => s.fromTextbookId === activeSource) ?? {
+        fromTextbookId: activeSource,
+        links: [],
+        targetIds: [],
+      }
+    )
+  }, [activeSource, sources])
 
   function toggleLinkType(linkId: string, current: SyncResourceType[], t: SyncResourceType) {
     const next = current.includes(t) ? current.filter((x) => x !== t) : [...current, t]
@@ -98,15 +93,13 @@ export default function SyncMappingPage() {
 
   return (
     <div>
-      {activePair && activePairData ? (
-        <PairDetail
-          tbA={activePairData.tbA}
-          tbB={activePairData.tbB}
-          links={activePairData.links}
+      {activeSource && activeSourceData ? (
+        <SourceDetail
+          fromTextbookId={activeSourceData.fromTextbookId}
+          links={activeSourceData.links}
           tbName={tbName}
-          tbLabel={tbLabel}
           chapterTitle={chapterTitle}
-          onBack={() => setActivePair(null)}
+          onBack={() => setActiveSource(null)}
           onAdd={() => setDialogOpen(true)}
           onToggleType={toggleLinkType}
           onRemove={(id) => {
@@ -115,13 +108,13 @@ export default function SyncMappingPage() {
           }}
         />
       ) : (
-        <PairList
-          pairs={pairs}
+        <SourceList
+          sources={sources}
           textbooks={textbooks}
           tbName={tbName}
-          onOpen={(a, b) => setActivePair([a, b])}
+          onOpen={(id) => setActiveSource(id)}
           onNew={() => {
-            setActivePair(null)
+            setActiveSource(null)
             setDialogOpen(true)
           }}
         />
@@ -132,36 +125,37 @@ export default function SyncMappingPage() {
         onOpenChange={setDialogOpen}
         textbooks={textbooks}
         tbItems={tbItems}
+        tbName={tbName}
         chaptersOf={chaptersOf}
         syncLinks={syncLinks}
         addSyncLink={addSyncLink}
-        // 在某教材对详情里新建时，锁定这两套教材
-        lockPair={activePair}
-        onCreated={(a, b) => setActivePair([a, b])}
+        // 在主教材详情里新建时，锁定主教材
+        lockSource={activeSource}
+        onCreated={(from) => setActiveSource(from)}
       />
     </div>
   )
 }
 
-/* ---------------- 教材对列表视图 ---------------- */
-function PairList({
-  pairs,
+/* ---------------- 主教材列表视图 ---------------- */
+function SourceList({
+  sources,
   textbooks,
   tbName,
   onOpen,
   onNew,
 }: {
-  pairs: { tbA: string; tbB: string; links: ChapterSyncLink[] }[]
+  sources: { fromTextbookId: string; links: ChapterSyncLink[]; targetIds: string[] }[]
   textbooks: Textbook[]
   tbName: (id: string) => string
-  onOpen: (a: string, b: string) => void
+  onOpen: (id: string) => void
   onNew: () => void
 }) {
   return (
     <>
       <PageHeader
         title="教材同步关系"
-        description="以教材对为维度管理同步：先选两套教材，再维护它们之间的目录对应与要同步的资源。"
+        description="以主教材为维度管理一对多同步：一套主教材可以把它的目录资源同步到多套目标教材，点击卡片查看与维护。"
         actions={
           <Button onClick={onNew} disabled={textbooks.length < 2}>
             <Plus className="size-4" /> 新建同步关系
@@ -172,11 +166,11 @@ function PairList({
       <div className="mb-3 flex items-center gap-2 px-1">
         <Link2 className="size-4 text-muted-foreground" />
         <p className="text-sm font-medium">
-          已建立同步的教材对（<span className="tabular-nums">{pairs.length}</span>）
+          作为主教材的同步（<span className="tabular-nums">{sources.length}</span>）
         </p>
       </div>
 
-      {pairs.length === 0 ? (
+      {sources.length === 0 ? (
         <Card className="border-dashed">
           <CardContent className="py-16 text-center text-sm text-muted-foreground">
             还没有任何教材同步关系，点击右上角「新建同步关系」开始建立。
@@ -184,109 +178,104 @@ function PairList({
         </Card>
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
-          {pairs.map((p) => {
-            // 统计这对教材里各类资源被同步的条数
-            const typeCount: Record<SyncResourceType, number> = {
-              question: 0,
-              assignment: 0,
-              microlesson: 0,
-              airclass: 0,
-            }
-            p.links.forEach((l) =>
-              l.syncTypes.forEach((t) => (typeCount[t] += 1)),
-            )
-            return (
-              <button
-                key={pairKeyOf(p.tbA, p.tbB)}
-                onClick={() => onOpen(p.tbA, p.tbB)}
-                className="group text-left"
-              >
-                <Card className="transition-colors hover:border-primary/50 hover:bg-accent/30">
-                  <CardContent className="py-4">
-                    <div className="mb-3 flex items-center gap-2">
-                      <div className="flex min-w-0 flex-1 items-center gap-2">
-                        <BookOpen className="size-4 shrink-0 text-primary" />
-                        <span className="truncate text-sm font-medium" title={tbName(p.tbA)}>
-                          {tbName(p.tbA)}
-                        </span>
-                      </div>
-                      <ArrowLeftRight className="size-4 shrink-0 text-primary" />
-                      <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
-                        <span className="truncate text-sm font-medium" title={tbName(p.tbB)}>
-                          {tbName(p.tbB)}
-                        </span>
-                      </div>
+          {sources.map((s) => (
+            <button
+              key={s.fromTextbookId}
+              onClick={() => onOpen(s.fromTextbookId)}
+              className="group text-left"
+            >
+              <Card className="h-full transition-colors hover:border-primary/50 hover:bg-accent/30">
+                <CardContent className="py-4">
+                  <div className="mb-3 flex items-center gap-2">
+                    <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                      <BookOpen className="size-4" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium" title={tbName(s.fromTextbookId)}>
+                        {tbName(s.fromTextbookId)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">主教材</p>
                     </div>
-                    <div className="flex items-center justify-between border-t border-border pt-3">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <Badge variant="secondary" className="font-normal tabular-nums">
-                          {p.links.length} 条目录对应
+                    <ChevronRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+                  </div>
+
+                  <div className="space-y-2 border-t border-border pt-3">
+                    <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <ArrowRight className="size-3.5" />
+                      同步到 {s.targetIds.length} 套目标教材 · 共 {s.links.length} 条目录对应
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {s.targetIds.map((tid) => (
+                        <Badge
+                          key={tid}
+                          variant="secondary"
+                          className="font-normal"
+                          title={tbName(tid)}
+                        >
+                          {tbName(tid)}
                         </Badge>
-                        {SYNC_RESOURCE_TYPES.filter((t) => typeCount[t] > 0).map((t) => (
-                          <Badge
-                            key={t}
-                            variant="outline"
-                            className="border-primary/30 bg-primary/10 font-normal text-primary"
-                          >
-                            {SYNC_RESOURCE_LABELS[t]} {typeCount[t]}
-                          </Badge>
-                        ))}
-                      </div>
-                      <ChevronRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+                      ))}
                     </div>
-                  </CardContent>
-                </Card>
-              </button>
-            )
-          })}
+                  </div>
+                </CardContent>
+              </Card>
+            </button>
+          ))}
         </div>
       )}
     </>
   )
 }
 
-/* ---------------- 教材对详情视图 ---------------- */
-function PairDetail({
-  tbA,
-  tbB,
+/* ---------------- 主教材详情视图（按目标教材分组） ---------------- */
+function SourceDetail({
+  fromTextbookId,
   links,
   tbName,
-  tbLabel,
   chapterTitle,
   onBack,
   onAdd,
   onToggleType,
   onRemove,
 }: {
-  tbA: string
-  tbB: string
+  fromTextbookId: string
   links: ChapterSyncLink[]
   tbName: (id: string) => string
-  tbLabel: (t: Textbook | undefined) => string
   chapterTitle: (id: string) => string
   onBack: () => void
   onAdd: () => void
   onToggleType: (id: string, current: SyncResourceType[], t: SyncResourceType) => void
   onRemove: (id: string) => void
 }) {
+  // 按目标教材分组
+  const groups = useMemo(() => {
+    const map = new Map<string, ChapterSyncLink[]>()
+    for (const l of links) {
+      if (!map.has(l.toTextbookId)) map.set(l.toTextbookId, [])
+      map.get(l.toTextbookId)!.push(l)
+    }
+    return Array.from(map.entries())
+  }, [links])
+
   return (
     <>
       <button
         onClick={onBack}
         className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
       >
-        <ArrowLeft className="size-4" /> 返回教材对列表
+        <ArrowLeft className="size-4" /> 返回主教材列表
       </button>
 
       <div className="mb-5 flex flex-col gap-4 rounded-lg border border-border bg-card p-5 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 text-sm font-medium">
-            <BookOpen className="size-4 text-primary" />
-            {tbName(tbA)}
-          </div>
-          <ArrowLeftRight className="size-4 text-primary" />
-          <div className="flex items-center gap-2 text-sm font-medium">
-            {tbName(tbB)}
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+            <BookOpen className="size-5" />
+          </span>
+          <div>
+            <p className="text-sm font-medium">{tbName(fromTextbookId)}</p>
+            <p className="text-xs text-muted-foreground">
+              主教材 · 同步到 {groups.length} 套目标教材
+            </p>
           </div>
         </div>
         <Button onClick={onAdd}>
@@ -294,87 +283,86 @@ function PairDetail({
         </Button>
       </div>
 
-      <div className="mb-3 flex items-center gap-2 px-1">
-        <Link2 className="size-4 text-muted-foreground" />
-        <p className="text-sm font-medium">
-          目录对应（<span className="tabular-nums">{links.length}</span>）
-        </p>
-      </div>
-
-      {links.length === 0 ? (
+      {groups.length === 0 ? (
         <Card className="border-dashed">
           <CardContent className="py-16 text-center text-sm text-muted-foreground">
-            这两套教材之间还没有目录对应，点击「新建目录对应」开始建立。
+            该主教材还没有同步到任何目标教材，点击「新建目录对应」开始建立。
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-2">
-          {links.map((link) => {
-            // 统一以 tbA 在左、tbB 在右展示
-            const leftChId =
-              link.fromTextbookId === tbA ? link.fromChapterId : link.toChapterId
-            const rightChId =
-              link.fromTextbookId === tbA ? link.toChapterId : link.fromChapterId
-            return (
-              <Card key={link.id}>
-                <CardContent className="flex flex-col gap-3 py-3 lg:flex-row lg:items-center">
-                  <div className="grid flex-1 grid-cols-[1fr_auto_1fr] items-center gap-3">
-                    <p
-                      className="truncate text-sm font-medium"
-                      title={chapterTitle(leftChId)}
-                    >
-                      {chapterTitle(leftChId)}
-                    </p>
-                    <ArrowLeftRight className="size-4 shrink-0 text-primary" />
-                    <p
-                      className="truncate text-sm font-medium"
-                      title={chapterTitle(rightChId)}
-                    >
-                      {chapterTitle(rightChId)}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-1.5 lg:border-l lg:pl-4">
-                    {SYNC_RESOURCE_TYPES.map((t) => {
-                      const active = link.syncTypes.includes(t)
-                      return (
-                        <button
-                          key={t}
-                          type="button"
-                          onClick={() => onToggleType(link.id, link.syncTypes, t)}
-                          title={
-                            active
-                              ? `点击取消同步「${SYNC_RESOURCE_LABELS[t]}」`
-                              : `点击同步「${SYNC_RESOURCE_LABELS[t]}」`
-                          }
+        <div className="space-y-6">
+          {groups.map(([toTextbookId, groupLinks]) => (
+            <div key={toTextbookId}>
+              <div className="mb-2 flex items-center gap-2 px-1">
+                <ArrowRight className="size-4 text-primary" />
+                <p className="text-sm font-medium">{tbName(toTextbookId)}</p>
+                <Badge variant="secondary" className="font-normal tabular-nums">
+                  {groupLinks.length} 条
+                </Badge>
+              </div>
+              <div className="space-y-2">
+                {groupLinks.map((link) => (
+                  <Card key={link.id}>
+                    <CardContent className="flex flex-col gap-3 py-3 lg:flex-row lg:items-center">
+                      <div className="grid flex-1 grid-cols-[1fr_auto_1fr] items-center gap-3">
+                        <p
+                          className="truncate text-sm font-medium"
+                          title={chapterTitle(link.fromChapterId)}
                         >
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              "cursor-pointer font-normal transition-colors",
-                              active
-                                ? "border-primary/30 bg-primary/10 text-primary"
-                                : "border-dashed text-muted-foreground/60 hover:bg-accent",
-                            )}
-                          >
-                            {SYNC_RESOURCE_LABELS[t]}
-                          </Badge>
-                        </button>
-                      )
-                    })}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-8 text-destructive hover:text-destructive"
-                      title="删除目录对应"
-                      onClick={() => onRemove(link.id)}
-                    >
-                      <Trash2 className="size-4" />
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            )
-          })}
+                          {chapterTitle(link.fromChapterId)}
+                        </p>
+                        <ArrowRight className="size-4 shrink-0 text-primary" />
+                        <p
+                          className="truncate text-sm text-muted-foreground"
+                          title={chapterTitle(link.toChapterId)}
+                        >
+                          {chapterTitle(link.toChapterId)}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1.5 lg:border-l lg:pl-4">
+                        {SYNC_RESOURCE_TYPES.map((t) => {
+                          const active = link.syncTypes.includes(t)
+                          return (
+                            <button
+                              key={t}
+                              type="button"
+                              onClick={() => onToggleType(link.id, link.syncTypes, t)}
+                              title={
+                                active
+                                  ? `点击取消同步「${SYNC_RESOURCE_LABELS[t]}」`
+                                  : `点击同步「${SYNC_RESOURCE_LABELS[t]}」`
+                              }
+                            >
+                              <Badge
+                                variant="outline"
+                                className={cn(
+                                  "cursor-pointer font-normal transition-colors",
+                                  active
+                                    ? "border-primary/30 bg-primary/10 text-primary"
+                                    : "border-dashed text-muted-foreground/60 hover:bg-accent",
+                                )}
+                              >
+                                {SYNC_RESOURCE_LABELS[t]}
+                              </Badge>
+                            </button>
+                          )
+                        })}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-8 text-destructive hover:text-destructive"
+                          title="删除目录对应"
+                          onClick={() => onRemove(link.id)}
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </>
@@ -387,21 +375,23 @@ function CreateLinkDialog({
   onOpenChange,
   textbooks,
   tbItems,
+  tbName,
   chaptersOf,
   syncLinks,
   addSyncLink,
-  lockPair,
+  lockSource,
   onCreated,
 }: {
   open: boolean
   onOpenChange: (v: boolean) => void
   textbooks: Textbook[]
   tbItems: Record<string, string>
-  chaptersOf: (tbId: string) => ReturnType<typeof Array.prototype.filter>
+  tbName: (id: string) => string
+  chaptersOf: (tbId: string) => ChapterNode[]
   syncLinks: ChapterSyncLink[]
   addSyncLink: (link: Omit<ChapterSyncLink, "id">) => void
-  lockPair: [string, string] | null
-  onCreated: (a: string, b: string) => void
+  lockSource: string | null
+  onCreated: (from: string) => void
 }) {
   const [dFromTb, setDFromTb] = useState<string>("")
   const [dToTb, setDToTb] = useState<string>("")
@@ -409,13 +399,13 @@ function CreateLinkDialog({
   const [dToCh, setDToCh] = useState<string>("")
   const [dTypes, setDTypes] = useState<SyncResourceType[]>(["question"])
 
-  // 打开时初始化（在教材对详情里打开则锁定该对教材）
+  // 打开时初始化（在主教材详情里打开则锁定主教材）
   useMemo(() => {
     if (open) {
-      const a = lockPair?.[0] ?? textbooks[0]?.id ?? ""
-      const b = lockPair?.[1] ?? textbooks[1]?.id ?? ""
-      setDFromTb(a)
-      setDToTb(b)
+      const from = lockSource ?? textbooks[0]?.id ?? ""
+      const to = textbooks.find((t) => t.id !== from)?.id ?? ""
+      setDFromTb(from)
+      setDToTb(to)
       setDFromCh("")
       setDToCh("")
       setDTypes(["question"])
@@ -424,14 +414,6 @@ function CreateLinkDialog({
 
   const dFromChapters = chaptersOf(dFromTb)
   const dToChapters = chaptersOf(dToTb)
-  const fromChItems = {
-    [NONE]: "选择教材一目录",
-    ...Object.fromEntries(dFromChapters.map((c: any) => [c.id, c.title])),
-  }
-  const toChItems = {
-    [NONE]: "选择教材二目录",
-    ...Object.fromEntries(dToChapters.map((c: any) => [c.id, c.title])),
-  }
 
   function toggleDraftType(t: SyncResourceType) {
     setDTypes((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]))
@@ -439,11 +421,11 @@ function CreateLinkDialog({
 
   function handleCreate() {
     if (dFromTb === dToTb) {
-      toast.error("请选择两套不同的教材")
+      toast.error("主教材与目标教材不能相同")
       return
     }
     if (!dFromCh || dFromCh === NONE || !dToCh || dToCh === NONE) {
-      toast.error("请选择两套教材要对应的目录")
+      toast.error("请选择主教材与目标教材要对应的目录")
       return
     }
     if (dTypes.length === 0) {
@@ -452,11 +434,13 @@ function CreateLinkDialog({
     }
     const dup = syncLinks.some(
       (l) =>
-        (l.fromChapterId === dFromCh && l.toChapterId === dToCh) ||
-        (l.fromChapterId === dToCh && l.toChapterId === dFromCh),
+        l.fromTextbookId === dFromTb &&
+        l.fromChapterId === dFromCh &&
+        l.toTextbookId === dToTb &&
+        l.toChapterId === dToCh,
     )
     if (dup) {
-      toast.error("这两个目录已建立对应")
+      toast.error("这条目录对应已存在")
       return
     }
     addSyncLink({
@@ -468,31 +452,29 @@ function CreateLinkDialog({
     })
     toast.success("已建立目录对应")
     onOpenChange(false)
-    onCreated(dFromTb, dToTb)
+    onCreated(dFromTb)
   }
 
-  const lockTextbooks = lockPair !== null
+  const lockSourceTb = lockSource !== null
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{lockTextbooks ? "新建目录对应" : "新建同步关系"}</DialogTitle>
+          <DialogTitle>新建同步关系</DialogTitle>
           <DialogDescription>
-            {lockTextbooks
-              ? "为当前教材对新增一条目录对应，并勾选要同步的资源。"
-              : "选择两套教材各自的一个目录建立对应，并勾选要同步的资源。"}
+            选择主教材的一个目录，对应到目标教材的一个目录，并勾选要同步的资源。同一主教材可同步到多套目标教材。
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-1">
           <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-3">
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground">教材一</label>
+              <label className="text-xs font-medium text-muted-foreground">主教材</label>
               <Select
                 value={dFromTb}
                 items={tbItems}
-                disabled={lockTextbooks}
+                disabled={lockSourceTb}
                 onValueChange={(v) => {
                   setDFromTb(v)
                   setDFromCh("")
@@ -511,14 +493,13 @@ function CreateLinkDialog({
               </Select>
             </div>
             <div className="flex h-9 items-center justify-center text-muted-foreground">
-              <ArrowLeftRight className="size-4" />
+              <ArrowRight className="size-4" />
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground">教材二</label>
+              <label className="text-xs font-medium text-muted-foreground">目标教材</label>
               <Select
                 value={dToTb}
                 items={tbItems}
-                disabled={lockTextbooks}
                 onValueChange={(v) => {
                   setDToTb(v)
                   setDToCh("")
@@ -528,24 +509,26 @@ function CreateLinkDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {textbooks.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>
-                      {tbItems[t.id]}
-                    </SelectItem>
-                  ))}
+                  {textbooks
+                    .filter((t) => t.id !== dFromTb)
+                    .map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {tbItems[t.id]}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
             </div>
           </div>
 
           <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-            <Select value={dFromCh || NONE} onValueChange={setDFromCh} items={fromChItems}>
+            <Select value={dFromCh || NONE} onValueChange={setDFromCh}>
               <SelectTrigger>
-                <SelectValue />
+                <SelectValue placeholder="选择主教材目录" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={NONE}>选择教材一目录</SelectItem>
-                {dFromChapters.map((c: any) => (
+                <SelectItem value={NONE}>选择主教材目录</SelectItem>
+                {dFromChapters.map((c) => (
                   <SelectItem key={c.id} value={c.id}>
                     {c.parentId ? "　" : ""}
                     {c.title}
@@ -553,14 +536,14 @@ function CreateLinkDialog({
                 ))}
               </SelectContent>
             </Select>
-            <ArrowLeftRight className="size-4 shrink-0 text-primary" />
-            <Select value={dToCh || NONE} onValueChange={setDToCh} items={toChItems}>
+            <ArrowRight className="size-4 shrink-0 text-primary" />
+            <Select value={dToCh || NONE} onValueChange={setDToCh}>
               <SelectTrigger>
-                <SelectValue />
+                <SelectValue placeholder="选择目标教材目录" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={NONE}>选择教材二目录</SelectItem>
-                {dToChapters.map((c: any) => (
+                <SelectItem value={NONE}>选择目标教材目录</SelectItem>
+                {dToChapters.map((c) => (
                   <SelectItem key={c.id} value={c.id}>
                     {c.parentId ? "　" : ""}
                     {c.title}
@@ -606,8 +589,4 @@ function CreateLinkDialog({
       </DialogContent>
     </Dialog>
   )
-}
-
-function pairKeyOf(a: string, b: string) {
-  return [a, b].sort().join("__")
 }
