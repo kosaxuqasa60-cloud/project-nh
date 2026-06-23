@@ -21,6 +21,7 @@ import type {
   Microlesson,
   NormalizedResource,
   Question,
+  ResourceLevel,
   SyncResourceType,
   Textbook,
 } from "./types"
@@ -60,6 +61,14 @@ interface StoreValue {
   // 资源中心：编辑 / 删除（删除会一并解除所有章节挂载）
   updateResource: (kind: SyncResourceType, id: string, patch: Record<string, unknown>) => void
   removeResource: (kind: SyncResourceType, id: string) => void
+  // 资源中心：批量管理
+  batchUpdateLevel: (
+    kind: SyncResourceType,
+    ids: string[],
+    level: ResourceLevel,
+    ownerScope?: string,
+  ) => void
+  batchRemoveResources: (kind: SyncResourceType, ids: string[]) => void
   // 某资源被挂载到的章节锚点数量（资源中心列表用）
   mountCountByResource: (kind: SyncResourceType, id: string) => number
   // 批量挂载：把一批资源挂入某教材的某章节
@@ -299,6 +308,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                 ? microlessons
                 : airClasses
         return list.find((r) => r.id === id)?.chapterMounts.length ?? 0
+      },
+
+      batchUpdateLevel: (kind, ids, level, ownerScope) => {
+        const idSet = new Set(ids)
+        const scope = level === "premium" ? undefined : ownerScope
+        const apply = <T extends { id: string }>(p: T[]) =>
+          p.map((r) =>
+            idSet.has(r.id) ? { ...r, level, ownerScope: scope, updatedAt: today() } : r,
+          )
+        if (kind === "question") setQuestions((p) => apply(p))
+        else if (kind === "assignment") setAssignments((p) => apply(p))
+        else if (kind === "microlesson") setMicrolessons((p) => apply(p))
+        else setAirClasses((p) => apply(p))
+      },
+      batchRemoveResources: (kind, ids) => {
+        const idSet = new Set(ids)
+        const filterOut = <T extends { id: string }>(p: T[]) => p.filter((r) => !idSet.has(r.id))
+        if (kind === "question") setQuestions((p) => filterOut(p))
+        else if (kind === "assignment") setAssignments((p) => filterOut(p))
+        else if (kind === "microlesson") setMicrolessons((p) => filterOut(p))
+        else setAirClasses((p) => filterOut(p))
       },
 
       batchMountResources: (kind, textbookId, chapterId, ids) =>
