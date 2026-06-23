@@ -16,6 +16,7 @@ import {
 import { PageHeader } from "@/components/admin/page-header"
 import { ResourceFormDialog } from "@/components/admin/resource-form-dialog"
 import { ResourceCard, ResourceCompactRow } from "@/components/admin/resource-card"
+import { QuestionCard, MediaCard } from "@/components/admin/rich-resource-card"
 import { buildRow, type AdminResourceRow } from "@/components/admin/resource-shared"
 import { BatchLevelDialog } from "@/components/admin/batch-level-dialog"
 import { Button } from "@/components/ui/button"
@@ -130,6 +131,21 @@ export default function ResourceCenterPage() {
       })
       .map((r) => buildRow(kind, r, kpLabel, mountCountByResource(kind, r.id)))
   }, [rawList, kind, levelFilter, questionType, mountStatus, keyword, kpLabel, mountCountByResource])
+
+  // 与 rows 同口径的原始对象列表，供富卡片读取完整字段
+  const filteredRaw: AnyResource[] = useMemo(() => {
+    return rawList.filter((r) => {
+      if (levelFilter !== "all" && r.level !== levelFilter) return false
+      if (kind === "question" && questionType !== "all" && (r as Question).type !== questionType)
+        return false
+      const mounts = r.chapterMounts.length
+      if (mountStatus === "mounted" && mounts === 0) return false
+      if (mountStatus === "unmounted" && mounts > 0) return false
+      const title = kind === "question" ? (r as Question).stem : (r as { title: string }).title
+      if (keyword && !title.includes(keyword)) return false
+      return true
+    })
+  }, [rawList, kind, levelFilter, questionType, mountStatus, keyword])
 
   const allSelected = rows.length > 0 && rows.every((r) => selected.has(r.id))
   const someSelected = selected.size > 0
@@ -386,16 +402,28 @@ export default function ResourceCenterPage() {
             </div>
           ) : view === "card" ? (
             <div className="space-y-3">
-              {rows.map((r) => (
-                <ResourceCard
-                  key={r.id}
-                  row={r}
-                  selected={selected.has(r.id)}
-                  onToggleSelect={() => toggleSelect(r.id)}
-                  onEdit={() => openEdit(r.id)}
-                  onDelete={() => setDeleteTarget({ id: r.id, title: r.title, mounts: r.mounts })}
-                />
-              ))}
+              {filteredRaw.map((r, i) =>
+                kind === "question" ? (
+                  <QuestionCard
+                    key={r.id}
+                    q={r as Question}
+                    index={i + 1}
+                    selected={selected.has(r.id)}
+                    onToggleSelect={() => toggleSelect(r.id)}
+                    onEdit={() => openEdit(r.id)}
+                  />
+                ) : (
+                  <MediaCard
+                    key={r.id}
+                    kind={kind as "assignment" | "microlesson" | "airclass"}
+                    data={r as Assignment | Microlesson | AirClass}
+                    index={i + 1}
+                    selected={selected.has(r.id)}
+                    onToggleSelect={() => toggleSelect(r.id)}
+                    onEdit={() => openEdit(r.id)}
+                  />
+                ),
+              )}
             </div>
           ) : (
             <div className="overflow-hidden rounded-lg border border-border bg-card">

@@ -95,16 +95,50 @@ export const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
 
 export type Difficulty = 1 | 2 | 3 | 4 | 5
 
+// 难度三档（对齐教师端 易/中/难）：1-2=易, 3=中, 4-5=难
+export const DIFFICULTY_TIER_LABELS = ["易", "中", "难"] as const
+export function difficultyTier(d: Difficulty): "易" | "中" | "难" {
+  if (d <= 2) return "易"
+  if (d === 3) return "中"
+  return "难"
+}
+
+// 标注体系受控词表（对齐教师端新建题目的标签命名空间）
+export const LITERACY_OPTIONS = ["数学运算", "逻辑推理", "数学建模", "直观想象", "数据分析"] // 核心素养
+export const COGNITIVE_OPTIONS = ["记忆", "理解", "应用", "分析综合"] // 认知层级
+export const USAGE_OPTIONS = [
+  "基础巩固",
+  "易错训练",
+  "课后练习",
+  "课堂讲解",
+  "单元复习",
+  "拓展提升",
+] // 教学用途
+export const SCENE_OPTIONS = ["纯数学情景", "生活情景", "跨学科情景"] // 情景属性
+
 export interface Question extends LeveledResource {
   id: string
-  stem: string // 题干
+  stem: string // 题干（支持 $...$ 公式）
   type: QuestionType
   subject: string
   difficulty: Difficulty
+  options?: { key: string; content: string }[] // 选项（选择题）
   answer?: string // 答案
   analysis?: string // 解析
   // 题目打知识点标签 —— 这是归集与自动挂载的依据
   knowledgePointIds: string[]
+  // 教师端标注维度
+  literacy?: string[] // 核心素养
+  cognitive?: string // 认知层级
+  usage?: string[] // 教学用途
+  scene?: string // 情景属性
+  teachTags?: string[] // 自定义教学标签
+  // 讲解资源
+  videoTitle?: string
+  videoDuration?: string
+  // 使用统计
+  usedCount?: number // 组卷次数
+  studentCount?: number // 已练学生数
   // 章节锚点：题目最终落在哪些章节（可由知识点自动归集，也可手工批量挂入）
   chapterMounts: { textbookId: string; chapterId: string }[]
   updatedAt: string
@@ -122,6 +156,8 @@ export interface Assignment extends LeveledResource {
   knowledgePointIds: string[]
   chapterMounts: { textbookId: string; chapterId: string }[]
   status: "draft" | "published"
+  assignedClasses?: number // 已布置班级数
+  usedCount?: number // 使用次数
   updatedAt: string
 }
 
@@ -132,6 +168,7 @@ export interface Microlesson extends LeveledResource {
   subject: string
   duration: string // 时长，如 "8:30"
   videoUrl?: string // 视频地址
+  viewCount?: number // 观看数
   knowledgePointIds: string[]
   chapterMounts: { textbookId: string; chapterId: string }[]
   updatedAt: string
