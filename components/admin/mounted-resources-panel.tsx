@@ -9,7 +9,13 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { useStore } from "@/lib/store"
-import { SYNC_RESOURCE_LABELS, SYNC_RESOURCE_TYPES, type SyncResourceType } from "@/lib/types"
+import { LevelBadge } from "@/components/admin/level-badge"
+import {
+  SYNC_RESOURCE_LABELS,
+  SYNC_RESOURCE_TYPES,
+  type ResourceLevel,
+  type SyncResourceType,
+} from "@/lib/types"
 
 const KIND_ICON: Record<SyncResourceType, typeof FileStack> = {
   question: FileStack,
@@ -45,7 +51,14 @@ export function MountedResourcesPanel({ textbookId }: { textbookId: string }) {
     )
     const byChapter = new Map<
       string,
-      { id: string; title: string; subtitle?: string; otherCount: number }[]
+      {
+        id: string
+        title: string
+        subtitle?: string
+        level: ResourceLevel
+        ownerScope?: string
+        otherCount: number
+      }[]
     >()
     for (const r of list) {
       if (keyword && !r.title.includes(keyword)) continue
@@ -53,7 +66,14 @@ export function MountedResourcesPanel({ textbookId }: { textbookId: string }) {
       const chId = mount?.chapterId ?? "none"
       const otherCount = r.chapterMounts.filter((m) => m.textbookId !== textbookId).length
       if (!byChapter.has(chId)) byChapter.set(chId, [])
-      byChapter.get(chId)!.push({ id: r.id, title: r.title, subtitle: r.subtitle, otherCount })
+      byChapter.get(chId)!.push({
+        id: r.id,
+        title: r.title,
+        subtitle: r.subtitle,
+        level: r.level,
+        ownerScope: r.ownerScope,
+        otherCount,
+      })
     }
     return Array.from(byChapter.entries()).map(([chapterId, items]) => ({
       chapterId,

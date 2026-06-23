@@ -2,13 +2,14 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { BookOpen, PenLine, Replace, Search } from "lucide-react"
+import { BookOpen, Library, PenLine, Replace, Search } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Input } from "@/components/ui/input"
 
 const NAV = [
   { href: "/textbooks", label: "教材管理", icon: BookOpen },
+  { href: "/resources", label: "资源中心", icon: Library },
   { href: "/migrate", label: "教材同步关系", icon: Replace },
 ]
 

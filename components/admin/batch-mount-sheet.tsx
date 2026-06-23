@@ -24,7 +24,14 @@ import {
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import { useStore } from "@/lib/store"
-import { SYNC_RESOURCE_LABELS, SYNC_RESOURCE_TYPES, type SyncResourceType } from "@/lib/types"
+import { LevelBadge } from "@/components/admin/level-badge"
+import {
+  RESOURCE_LEVEL_LABELS,
+  RESOURCE_LEVELS,
+  SYNC_RESOURCE_LABELS,
+  SYNC_RESOURCE_TYPES,
+  type SyncResourceType,
+} from "@/lib/types"
 
 const KIND_ICON: Record<SyncResourceType, typeof FileStack> = {
   question: FileStack,
@@ -49,12 +56,16 @@ export function BatchMountSheet({
   const { textbooks, chapters, resourcesByKind, batchMountResources } = useStore()
 
   const chapter = chapters.find((c) => c.id === chapterId)
+  // 挂载目标教材的学科：只允许挂入同学科资源，避免错挂
+  const targetSubject = textbooks.find((t) => t.id === textbookId)?.subject
   const [kind, setKind] = useState<SyncResourceType>("question")
   const [keyword, setKeyword] = useState("")
   const [selected, setSelected] = useState<Set<string>>(new Set())
   // 来源筛选：从「哪本教材的哪个目录节点」里挑资源
   const [srcTextbook, setSrcTextbook] = useState(ANY)
   const [srcChapter, setSrcChapter] = useState(ANY)
+  // 级别筛选
+  const [level, setLevel] = useState(ANY)
 
   const resources = useMemo(() => resourcesByKind(kind), [resourcesByKind, kind])
 
@@ -73,10 +84,14 @@ export function BatchMountSheet({
   const availableList = useMemo(() => {
     if (!chapter) return []
     return resources.filter((r) => {
+      // 学科一致性：只挂入与目标教材同学科的资源
+      if (targetSubject && r.subject !== targetSubject) return false
       const notMounted = !r.chapterMounts.some(
         (m) => m.textbookId === textbookId && m.chapterId === chapter.id,
       )
       if (!notMounted) return false
+      // 级别筛选
+      if (level !== ANY && r.level !== level) return false
       // 来源筛选：资源需挂在所选来源教材（及章节）下
       if (srcTextbook !== ANY) {
         const inSrc = r.chapterMounts.some(
@@ -89,7 +104,7 @@ export function BatchMountSheet({
       const matchKw = !keyword || r.title.includes(keyword)
       return matchKw
     })
-  }, [chapter, resources, textbookId, keyword, srcTextbook, srcChapter])
+  }, [chapter, resources, textbookId, keyword, srcTextbook, srcChapter, level, targetSubject])
 
   if (!chapter) return null
 
@@ -219,6 +234,34 @@ export function BatchMountSheet({
               </SelectContent>
             </Select>
           </div>
+          <div className="grid gap-1.5">
+            <Label className="text-xs text-muted-foreground">级别</Label>
+            <Select
+              value={level}
+              onValueChange={setLevel}
+              items={{
+                [ANY]: "全部级别",
+                ...RESOURCE_LEVEL_LABELS,
+              }}
+            >
+              <SelectTrigger className="h-9 w-[140px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ANY}>全部级别</SelectItem>
+                {RESOURCE_LEVELS.map((l) => (
+                  <SelectItem key={l} value={l}>
+                    {RESOURCE_LEVEL_LABELS[l]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {targetSubject && (
+            <p className="w-full text-xs text-muted-foreground">
+              仅显示与本教材同学科（{targetSubject}）的资源。
+            </p>
+          )}
         </div>
 
         {/* 选择资源挂入 */}
@@ -253,11 +296,14 @@ export function BatchMountSheet({
                 />
                 <div className="min-w-0 flex-1 space-y-1">
                   <p className="text-sm leading-snug text-foreground/90">{r.title}</p>
-                  {r.subtitle && (
-                    <Badge variant="secondary" className="font-normal">
-                      {r.subtitle}
-                    </Badge>
-                  )}
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {r.subtitle && (
+                      <Badge variant="secondary" className="font-normal">
+                        {r.subtitle}
+                      </Badge>
+                    )}
+                    <LevelBadge level={r.level} ownerScope={r.ownerScope} />
+                  </div>
                 </div>
               </label>
             )

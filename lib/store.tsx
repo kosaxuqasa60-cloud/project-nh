@@ -50,6 +50,18 @@ interface StoreValue {
   setChapterKnowledgePoints: (chapterId: string, kpIds: string[]) => void
   // 通用资源：按类型取归一化资源列表
   resourcesByKind: (kind: SyncResourceType) => NormalizedResource[]
+  // 资源中心：创建四类资源（进库，未挂载）
+  addQuestion: (q: Omit<Question, "id" | "updatedAt" | "chapterMounts">) => void
+  addAssignment: (
+    a: Omit<Assignment, "id" | "updatedAt" | "chapterMounts" | "textbookIds" | "status">,
+  ) => void
+  addMicrolesson: (m: Omit<Microlesson, "id" | "updatedAt" | "chapterMounts">) => void
+  addAirClass: (a: Omit<AirClass, "id" | "updatedAt" | "chapterMounts">) => void
+  // 资源中心：编辑 / 删除（删除会一并解除所有章节挂载）
+  updateResource: (kind: SyncResourceType, id: string, patch: Record<string, unknown>) => void
+  removeResource: (kind: SyncResourceType, id: string) => void
+  // 某资源被挂载到的章节锚点数量（资源中心列表用）
+  mountCountByResource: (kind: SyncResourceType, id: string) => number
   // 批量挂载：把一批资源挂入某教材的某章节
   batchMountResources: (
     kind: SyncResourceType,
@@ -192,6 +204,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             kind,
             title: q.stem,
             subtitle: QUESTION_TYPE_LABELS[q.type],
+            subject: q.subject,
+            level: q.level,
+            ownerScope: q.ownerScope,
             knowledgePointIds: q.knowledgePointIds,
             chapterMounts: q.chapterMounts,
           }))
@@ -201,6 +216,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             kind,
             title: a.title,
             subtitle: `${a.questionIds.length} 道题`,
+            subject: a.subject,
+            level: a.level,
+            ownerScope: a.ownerScope,
             knowledgePointIds: a.knowledgePointIds,
             chapterMounts: a.chapterMounts,
           }))
@@ -210,6 +228,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             kind,
             title: m.title,
             subtitle: m.duration,
+            subject: m.subject,
+            level: m.level,
+            ownerScope: m.ownerScope,
             knowledgePointIds: m.knowledgePointIds,
             chapterMounts: m.chapterMounts,
           }))
@@ -218,9 +239,66 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           kind,
           title: a.title,
           subtitle: a.teacher,
+          subject: a.subject,
+          level: a.level,
+          ownerScope: a.ownerScope,
           knowledgePointIds: a.knowledgePointIds,
           chapterMounts: a.chapterMounts,
         }))
+      },
+
+      addQuestion: (q) =>
+        setQuestions((prev) => [
+          { ...q, id: nextId("q"), chapterMounts: [], updatedAt: today() } as Question,
+          ...prev,
+        ]),
+      addAssignment: (a) =>
+        setAssignments((prev) => [
+          {
+            ...a,
+            id: nextId("as"),
+            chapterMounts: [],
+            textbookIds: [],
+            status: "published",
+            updatedAt: today(),
+          } as Assignment,
+          ...prev,
+        ]),
+      addMicrolesson: (m) =>
+        setMicrolessons((prev) => [
+          { ...m, id: nextId("ml"), chapterMounts: [], updatedAt: today() } as Microlesson,
+          ...prev,
+        ]),
+      addAirClass: (a) =>
+        setAirClasses((prev) => [
+          { ...a, id: nextId("ac"), chapterMounts: [], updatedAt: today() } as AirClass,
+          ...prev,
+        ]),
+
+      updateResource: (kind, id, patch) => {
+        const apply = <T extends { id: string }>(p: T[]) =>
+          p.map((r) => (r.id === id ? { ...r, ...patch, updatedAt: today() } : r))
+        if (kind === "question") setQuestions((p) => apply(p))
+        else if (kind === "assignment") setAssignments((p) => apply(p))
+        else if (kind === "microlesson") setMicrolessons((p) => apply(p))
+        else setAirClasses((p) => apply(p))
+      },
+      removeResource: (kind, id) => {
+        if (kind === "question") setQuestions((p) => p.filter((r) => r.id !== id))
+        else if (kind === "assignment") setAssignments((p) => p.filter((r) => r.id !== id))
+        else if (kind === "microlesson") setMicrolessons((p) => p.filter((r) => r.id !== id))
+        else setAirClasses((p) => p.filter((r) => r.id !== id))
+      },
+      mountCountByResource: (kind, id) => {
+        const list: Mountable[] =
+          kind === "question"
+            ? questions
+            : kind === "assignment"
+              ? assignments
+              : kind === "microlesson"
+                ? microlessons
+                : airClasses
+        return list.find((r) => r.id === id)?.chapterMounts.length ?? 0
       },
 
       batchMountResources: (kind, textbookId, chapterId, ids) =>

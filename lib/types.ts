@@ -23,6 +23,32 @@ export const STATUS_LABELS: Record<TextbookStatus, string> = {
   archived: "已下架",
 }
 
+// 资源级别 / 来源：决定资源的归属与可见广度
+// city/district/school 为行政来源（需配归属 ownerScope），premium 为平台精品（全员可见，仅平台管理员可建）
+export type ResourceLevel = "city" | "district" | "school" | "premium"
+
+export const RESOURCE_LEVEL_LABELS: Record<ResourceLevel, string> = {
+  city: "市级",
+  district: "区级",
+  school: "校级",
+  premium: "精品",
+}
+
+export const RESOURCE_LEVELS: ResourceLevel[] = ["city", "district", "school", "premium"]
+
+// 原型阶段：归属用固定枚举（不建独立组织表），按级别提供可选范围
+export const SCOPE_OPTIONS: Record<Exclude<ResourceLevel, "premium">, string[]> = {
+  city: ["上海市", "北京市"],
+  district: ["徐汇区", "浦东新区", "黄浦区", "海淀区"],
+  school: ["上海市实验中学", "徐汇区第一中心小学", "浦东新区张江中学"],
+}
+
+// 资源级别 + 归属的公共字段，四类资源都带
+export interface LeveledResource {
+  level: ResourceLevel
+  ownerScope?: string // premium 时为空（平台全员），其余为具体 市/区/校
+}
+
 export interface Textbook {
   id: string
   name: string // 教材名称
@@ -69,12 +95,14 @@ export const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
 
 export type Difficulty = 1 | 2 | 3 | 4 | 5
 
-export interface Question {
+export interface Question extends LeveledResource {
   id: string
   stem: string // 题干
   type: QuestionType
   subject: string
   difficulty: Difficulty
+  answer?: string // 答案
+  analysis?: string // 解析
   // 题目打知识点标签 —— 这是归集与自动挂载的依据
   knowledgePointIds: string[]
   // 章节锚点：题目最终落在哪些章节（可由知识点自动归集，也可手工批量挂入）
@@ -83,7 +111,7 @@ export interface Question {
 }
 
 // 作业
-export interface Assignment {
+export interface Assignment extends LeveledResource {
   id: string
   title: string
   subject: string
@@ -98,22 +126,25 @@ export interface Assignment {
 }
 
 // 微课
-export interface Microlesson {
+export interface Microlesson extends LeveledResource {
   id: string
   title: string
   subject: string
   duration: string // 时长，如 "8:30"
+  videoUrl?: string // 视频地址
   knowledgePointIds: string[]
   chapterMounts: { textbookId: string; chapterId: string }[]
   updatedAt: string
 }
 
 // 空中课堂
-export interface AirClass {
+export interface AirClass extends LeveledResource {
   id: string
   title: string
   subject: string
   teacher: string // 主讲教师
+  scheduledAt?: string // 直播时间
+  liveUrl?: string // 直播链接
   knowledgePointIds: string[]
   chapterMounts: { textbookId: string; chapterId: string }[]
   updatedAt: string
@@ -142,6 +173,9 @@ export interface NormalizedResource {
   kind: SyncResourceType
   title: string
   subtitle?: string // 题型 / 时长 / 主讲等附属信息
+  subject: string
+  level: ResourceLevel
+  ownerScope?: string
   knowledgePointIds: string[]
   chapterMounts: { textbookId: string; chapterId: string }[]
 }
