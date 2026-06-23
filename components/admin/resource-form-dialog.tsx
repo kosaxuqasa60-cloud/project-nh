@@ -27,10 +27,14 @@ import { cn } from "@/lib/utils"
 import { SUBJECTS } from "@/lib/mock-data"
 import { useStore } from "@/lib/store"
 import {
+  COGNITIVE_OPTIONS,
+  LITERACY_OPTIONS,
   QUESTION_TYPE_LABELS,
   RESOURCE_LEVEL_LABELS,
   RESOURCE_LEVELS,
+  SCENE_OPTIONS,
   SCOPE_OPTIONS,
+  USAGE_OPTIONS,
   type AirClass,
   type Assignment,
   type Difficulty,
@@ -86,6 +90,15 @@ export function ResourceFormDialog({
   const [difficulty, setDifficulty] = useState<Difficulty>(e?.difficulty ?? 2)
   const [answer, setAnswer] = useState(e?.answer ?? "")
   const [analysis, setAnalysis] = useState(e?.analysis ?? "")
+  // 题目标注体系（对齐教师端）
+  const [literacy, setLiteracy] = useState<string[]>(e?.literacy ?? [])
+  const [cognitive, setCognitive] = useState<string>(e?.cognitive ?? "")
+  const [usage, setUsage] = useState<string[]>(e?.usage ?? [])
+  const [scene, setScene] = useState<string>(e?.scene ?? "")
+  const [teachTags, setTeachTags] = useState<string[]>(e?.teachTags ?? [])
+  const [tagInput, setTagInput] = useState("")
+  const [videoTitle, setVideoTitle] = useState(e?.videoTitle ?? "")
+  const [videoDuration, setVideoDuration] = useState(e?.videoDuration ?? "")
 
   // 作业 / 微课 / 空中课堂 通用标题
   const [title, setTitle] = useState(e?.title ?? "")
@@ -131,10 +144,27 @@ export function ResourceFormDialog({
       knowledgePointIds: kpIds,
     }
 
+    const questionExtra = {
+      literacy,
+      cognitive: cognitive || undefined,
+      usage,
+      scene: scene || undefined,
+      teachTags,
+      videoTitle: videoTitle || undefined,
+      videoDuration: videoDuration || undefined,
+    }
+
     if (isEdit && editing) {
       const patch: Record<string, unknown> = { ...base }
       if (kind === "question")
-        Object.assign(patch, { stem: stem.trim(), type: qType, difficulty, answer, analysis })
+        Object.assign(patch, {
+          stem: stem.trim(),
+          type: qType,
+          difficulty,
+          answer,
+          analysis,
+          ...questionExtra,
+        })
       else if (kind === "assignment") Object.assign(patch, { title: title.trim(), questionIds })
       else if (kind === "microlesson")
         Object.assign(patch, { title: title.trim(), duration, videoUrl })
@@ -143,7 +173,15 @@ export function ResourceFormDialog({
       toast.success(`${kindLabel}已更新`)
     } else {
       if (kind === "question")
-        addQuestion({ ...base, stem: stem.trim(), type: qType, difficulty, answer, analysis })
+        addQuestion({
+          ...base,
+          stem: stem.trim(),
+          type: qType,
+          difficulty,
+          answer,
+          analysis,
+          ...questionExtra,
+        })
       else if (kind === "assignment")
         addAssignment({ ...base, title: title.trim(), questionIds })
       else if (kind === "microlesson")
@@ -208,10 +246,98 @@ export function ResourceFormDialog({
                 <Textarea
                   value={analysis}
                   onChange={(ev) => setAnalysis(ev.target.value)}
-                  placeholder="可选：解题思路与步骤"
+                  placeholder="可选：解题思路与步骤。支持 $...$ 公式"
                   className="min-h-16"
                 />
               </Field>
+
+              {/* 讲解视频 */}
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="讲解视频标题">
+                  <Input
+                    value={videoTitle}
+                    onChange={(ev) => setVideoTitle(ev.target.value)}
+                    placeholder="可选，如：认识负数与相反数"
+                  />
+                </Field>
+                <Field label="视频时长">
+                  <Input
+                    value={videoDuration}
+                    onChange={(ev) => setVideoDuration(ev.target.value)}
+                    placeholder="如 06:12"
+                  />
+                </Field>
+              </div>
+
+              {/* 系统标注体系 */}
+              <div className="space-y-4 rounded-lg border border-border bg-muted/20 p-3">
+                <p className="text-xs font-medium text-foreground">系统标注</p>
+                <Field label={`核心素养（已选 ${literacy.length}）`}>
+                  <TagPicker options={LITERACY_OPTIONS} value={literacy} onChange={setLiteracy} />
+                </Field>
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="认知层级">
+                    <Select
+                      value={cognitive}
+                      onValueChange={setCognitive}
+                      items={Object.fromEntries(COGNITIVE_OPTIONS.map((o) => [o, o]))}
+                    >
+                      <SelectTrigger><SelectValue placeholder="选择认知层级" /></SelectTrigger>
+                      <SelectContent>
+                        {COGNITIVE_OPTIONS.map((o) => (
+                          <SelectItem key={o} value={o}>{o}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  <Field label="情景属性">
+                    <Select
+                      value={scene}
+                      onValueChange={setScene}
+                      items={Object.fromEntries(SCENE_OPTIONS.map((o) => [o, o]))}
+                    >
+                      <SelectTrigger><SelectValue placeholder="选择情景属性" /></SelectTrigger>
+                      <SelectContent>
+                        {SCENE_OPTIONS.map((o) => (
+                          <SelectItem key={o} value={o}>{o}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                </div>
+                <Field label={`教学用途（已选 ${usage.length}）`}>
+                  <TagPicker options={USAGE_OPTIONS} value={usage} onChange={setUsage} />
+                </Field>
+                <Field label="教学标签">
+                  <div className="flex flex-wrap gap-1.5">
+                    {teachTags.map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => setTeachTags((p) => p.filter((x) => x !== t))}
+                        className="inline-flex items-center gap-1 rounded-full bg-brand-soft px-2.5 py-1 text-xs text-brand-soft-foreground"
+                      >
+                        {t}
+                        <span className="text-brand-soft-foreground/60">×</span>
+                      </button>
+                    ))}
+                    <input
+                      value={tagInput}
+                      onChange={(ev) => setTagInput(ev.target.value)}
+                      onKeyDown={(ev) => {
+                        if (ev.key === "Enter" && tagInput.trim()) {
+                          ev.preventDefault()
+                          const v = tagInput.trim()
+                          setTeachTags((p) => (p.includes(v) ? p : [...p, v]))
+                          setTagInput("")
+                        }
+                      }}
+                      placeholder="输入后回车添加"
+                      className="min-w-32 flex-1 border-0 bg-transparent text-xs outline-none placeholder:text-muted-foreground"
+                    />
+                  </div>
+                </Field>
+              </div>
             </div>
           ) : (
             <Field label={`${kindLabel}标题`} required>
@@ -367,6 +493,41 @@ export function ResourceFormDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+function TagPicker({
+  options,
+  value,
+  onChange,
+}: {
+  options: readonly string[]
+  value: string[]
+  onChange: (v: string[]) => void
+}) {
+  const toggle = (o: string) =>
+    onChange(value.includes(o) ? value.filter((x) => x !== o) : [...value, o])
+  return (
+    <div className="flex flex-wrap gap-2">
+      {options.map((o) => {
+        const checked = value.includes(o)
+        return (
+          <button
+            key={o}
+            type="button"
+            onClick={() => toggle(o)}
+            className={cn(
+              "rounded-full border px-3 py-1 text-xs transition-colors",
+              checked
+                ? "border-brand bg-brand-soft text-brand-soft-foreground"
+                : "border-border text-muted-foreground hover:bg-muted",
+            )}
+          >
+            {o}
+          </button>
+        )
+      })}
+    </div>
   )
 }
 

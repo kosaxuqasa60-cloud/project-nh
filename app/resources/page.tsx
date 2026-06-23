@@ -15,7 +15,7 @@ import {
 } from "lucide-react"
 import { PageHeader } from "@/components/admin/page-header"
 import { ResourceFormDialog } from "@/components/admin/resource-form-dialog"
-import { ResourceCard, ResourceCompactRow } from "@/components/admin/resource-card"
+import { ResourceCompactRow } from "@/components/admin/resource-card"
 import { QuestionCard, MediaCard } from "@/components/admin/rich-resource-card"
 import { buildRow, type AdminResourceRow } from "@/components/admin/resource-shared"
 import { BatchLevelDialog } from "@/components/admin/batch-level-dialog"
@@ -501,10 +501,10 @@ export default function ResourceCenterPage() {
 }
 
 const LEVEL_DOT: Record<ResourceLevel, string> = {
-  premium: "bg-chart-4",
-  city: "bg-chart-1",
+  city: "bg-chart-4",
   district: "bg-chart-2",
-  school: "bg-chart-3",
+  school: "bg-chart-1",
+  premium: "bg-chart-3",
 }
 
 function FacetItem({

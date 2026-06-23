@@ -60,6 +60,7 @@
 }
 
 :root {
+  /* 教师端绿色品牌配色 */
   color-scheme: light;
   --background: oklch(0.984 0.002 145);
   --foreground: oklch(0.24 0.012 160);

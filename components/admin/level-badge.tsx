@@ -3,20 +3,20 @@ import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { RESOURCE_LEVEL_LABELS, type ResourceLevel } from "@/lib/types"
 
-// 各级别配色：精品最醒目（金色调），市/区/校用中性梯度
+// 各级别配色对齐教师端来源色：市=赭红, 区=蓝, 校=绿, 精品=金
 const LEVEL_CLASS: Record<ResourceLevel, string> = {
-  premium: "border-chart-4/40 bg-chart-4/15 text-chart-4",
-  city: "border-chart-1/30 bg-chart-1/10 text-chart-1",
+  city: "border-chart-4/30 bg-chart-4/10 text-chart-4",
   district: "border-chart-2/30 bg-chart-2/10 text-chart-2",
-  school: "border-chart-3/30 bg-chart-3/10 text-chart-3",
+  school: "border-chart-1/30 bg-chart-1/10 text-chart-1",
+  premium: "border-chart-3/40 bg-chart-3/15 text-chart-3",
 }
 
 // 方角实心级别角标（对齐教师端：市/区/校/精 单字方块）
 const LEVEL_CHIP_CLASS: Record<ResourceLevel, string> = {
-  premium: "bg-chart-4 text-white",
-  city: "bg-chart-1 text-white",
+  city: "bg-chart-4 text-white",
   district: "bg-chart-2 text-white",
-  school: "bg-chart-3 text-white",
+  school: "bg-chart-1 text-white",
+  premium: "bg-chart-3 text-white",
 }
 const LEVEL_SHORT: Record<ResourceLevel, string> = {
   premium: "精",
