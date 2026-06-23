@@ -221,6 +221,7 @@ export function MountedResourcesPanel({ textbookId }: { textbookId: string }) {
                               {it.subtitle}
                             </Badge>
                           )}
+                          <LevelBadge level={it.level} ownerScope={it.ownerScope} />
                           {it.otherCount > 0 && (
                             <Badge
                               variant="outline"

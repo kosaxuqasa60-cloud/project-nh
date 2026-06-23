@@ -199,7 +199,11 @@ export default function ResourceCenterPage() {
       {/* 横排筛选 */}
       <div className="mb-4 flex flex-wrap items-end gap-3">
         <FilterField label="学科">
-          <Select value={subject} onValueChange={setSubject}>
+          <Select
+            value={subject}
+            onValueChange={setSubject}
+            items={{ [ALL]: "全部学科", ...Object.fromEntries(SUBJECTS.map((s) => [s, s])) }}
+          >
             <SelectTrigger className="h-9 w-32"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value={ALL}>全部学科</SelectItem>
@@ -210,7 +214,11 @@ export default function ResourceCenterPage() {
           </Select>
         </FilterField>
         <FilterField label="级别">
-          <Select value={level} onValueChange={setLevel}>
+          <Select
+            value={level}
+            onValueChange={setLevel}
+            items={{ [ALL]: "全部级别", ...RESOURCE_LEVEL_LABELS }}
+          >
             <SelectTrigger className="h-9 w-32"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value={ALL}>全部级别</SelectItem>
@@ -221,7 +229,11 @@ export default function ResourceCenterPage() {
           </Select>
         </FilterField>
         <FilterField label="挂载状态">
-          <Select value={mountStatus} onValueChange={setMountStatus}>
+          <Select
+            value={mountStatus}
+            onValueChange={setMountStatus}
+            items={{ [ALL]: "全部", mounted: "已挂载", unmounted: "未挂载" }}
+          >
             <SelectTrigger className="h-9 w-32"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value={ALL}>全部</SelectItem>
