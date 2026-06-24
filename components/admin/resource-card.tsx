@@ -66,7 +66,7 @@ export function ResourceCard({
             )}
             <span className="ml-auto text-xs text-muted-foreground">
               {RESOURCE_LEVEL_LABELS[row.level]}
-              {row.level !== "premium" && row.ownerScope ? ` · ${row.ownerScope}` : " · 全员可见"}
+              {row.ownerScope ? ` · ${row.ownerScope}` : ""}
             </span>
           </div>
 

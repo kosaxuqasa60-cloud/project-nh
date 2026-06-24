@@ -23,30 +23,101 @@ export const STATUS_LABELS: Record<TextbookStatus, string> = {
   archived: "已下架",
 }
 
-// 资源级别 / 来源：决定资源的归属与可见广度
-// city/district/school 为行政来源（需配归属 ownerScope），premium 为平台精品（全员可见，仅平台管理员可建）
-export type ResourceLevel = "city" | "district" | "school" | "premium"
+// 资源级别 / 授权范围：决定资源的归属与可见广度
+// SaaS 平台后台新增资源时，必须指定归属到具体的 市 / 区 / 校
+export type ResourceLevel = "city" | "district" | "school"
 
 export const RESOURCE_LEVEL_LABELS: Record<ResourceLevel, string> = {
   city: "市级",
   district: "区级",
   school: "校级",
-  premium: "精品",
 }
 
-export const RESOURCE_LEVELS: ResourceLevel[] = ["city", "district", "school", "premium"]
+export const RESOURCE_LEVELS: ResourceLevel[] = ["city", "district", "school"]
 
-// 原型阶段：归属用固定枚举（不建独立组织表），按级别提供可选范围
-export const SCOPE_OPTIONS: Record<Exclude<ResourceLevel, "premium">, string[]> = {
-  city: ["上海市", "北京市"],
-  district: ["徐汇区", "浦东新区", "黄浦区", "海淀区"],
-  school: ["上海市实验中学", "徐汇区第一中心小学", "浦东新区张江中学"],
+// 市 → 区 → 校 三级级联组织结构（SaaS 多租户：每个市/区/校是一个授权范围）
+export interface SchoolOrg {
+  id: string
+  name: string
+}
+export interface DistrictOrg {
+  id: string
+  name: string
+  schools: SchoolOrg[]
+}
+export interface CityOrg {
+  id: string
+  name: string
+  districts: DistrictOrg[]
 }
 
-// 资源级别 + 归属的公共字段，四类资源都带
+export const ORG_TREE: CityOrg[] = [
+  {
+    id: "sh",
+    name: "上海市",
+    districts: [
+      {
+        id: "sh-xh",
+        name: "徐汇区",
+        schools: [
+          { id: "sh-xh-1", name: "徐汇区第一中心小学" },
+          { id: "sh-xh-2", name: "上海市第二中学" },
+          { id: "sh-xh-3", name: "位育中学" },
+        ],
+      },
+      {
+        id: "sh-pd",
+        name: "浦东新区",
+        schools: [
+          { id: "sh-pd-1", name: "张江中学" },
+          { id: "sh-pd-2", name: "建平中学" },
+        ],
+      },
+      {
+        id: "sh-hp",
+        name: "黄浦区",
+        schools: [
+          { id: "sh-hp-1", name: "格致中学" },
+          { id: "sh-hp-2", name: "大同中学" },
+        ],
+      },
+    ],
+  },
+  {
+    id: "bj",
+    name: "北京市",
+    districts: [
+      {
+        id: "bj-hd",
+        name: "海淀区",
+        schools: [
+          { id: "bj-hd-1", name: "中关村中学" },
+          { id: "bj-hd-2", name: "人大附中" },
+        ],
+      },
+      {
+        id: "bj-dc",
+        name: "东城区",
+        schools: [
+          { id: "bj-dc-1", name: "北京二中" },
+          { id: "bj-dc-2", name: "汇文中学" },
+        ],
+      },
+    ],
+  },
+]
+
+// 按级别提供可选归属范围（由级联结构派生，保持向后兼容）
+export const SCOPE_OPTIONS: Record<ResourceLevel, string[]> = {
+  city: ORG_TREE.map((c) => c.name),
+  district: ORG_TREE.flatMap((c) => c.districts.map((d) => d.name)),
+  school: ORG_TREE.flatMap((c) => c.districts.flatMap((d) => d.schools.map((s) => s.name))),
+}
+
+// 资源级别 + 归属的公共字段：所有资源都带，后台新增时必须指定具体 市/区/校
 export interface LeveledResource {
   level: ResourceLevel
-  ownerScope?: string // premium 时为空（平台全员），其余为具体 市/区/校
+  ownerScope?: string // 具体的 市 / 区 / 校 名称
 }
 
 export interface Textbook {
@@ -187,7 +258,27 @@ export interface AirClass extends LeveledResource {
   updatedAt: string
 }
 
-// 可同步的资源类型
+// 精品资源（独立类型）：平台/区域精选的优质资源包，可由组卷或专题构成，同样带 市/区/校 级别
+export type PremiumCategory = "paper" | "special" | "courseware"
+export const PREMIUM_CATEGORY_LABELS: Record<PremiumCategory, string> = {
+  paper: "精品试卷",
+  special: "专题资源",
+  courseware: "精品课件",
+}
+export interface Premium extends LeveledResource {
+  id: string
+  title: string
+  subject: string
+  category: PremiumCategory
+  description?: string
+  questionIds: string[] // 精品试卷 / 专题包含的题目
+  knowledgePointIds: string[]
+  chapterMounts: { textbookId: string; chapterId: string }[]
+  usedCount?: number
+  updatedAt: string
+}
+
+// 可同步的资源类型（参与教材章节挂载 / 同步关系的类型）
 export type SyncResourceType = "question" | "assignment" | "microlesson" | "airclass"
 
 export const SYNC_RESOURCE_LABELS: Record<SyncResourceType, string> = {
@@ -204,10 +295,30 @@ export const SYNC_RESOURCE_TYPES: SyncResourceType[] = [
   "airclass",
 ]
 
+// 资源中心菜单覆盖的全部资源类型（含精品资源），用于左侧二级菜单与各资源页
+export type ResourceKind = SyncResourceType | "premium"
+
+export const RESOURCE_KIND_LABELS: Record<ResourceKind, string> = {
+  question: "题库",
+  assignment: "作业",
+  premium: "精品资源",
+  microlesson: "微课",
+  airclass: "空中课堂",
+}
+
+// 左侧二级菜单顺序：题库 / 作业 / 精品资源 / 微课 / 空中课堂
+export const RESOURCE_KINDS: ResourceKind[] = [
+  "question",
+  "assignment",
+  "premium",
+  "microlesson",
+  "airclass",
+]
+
 // 章节挂载时，四类资源统一成这个结构展示 / 操作
 export interface NormalizedResource {
   id: string
-  kind: SyncResourceType
+  kind: ResourceKind
   title: string
   subtitle?: string // 题型 / 时长 / 主讲等附属信息
   subject: string
