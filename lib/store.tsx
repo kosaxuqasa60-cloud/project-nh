@@ -56,7 +56,11 @@ interface StoreValue {
   // 通用资源：按类型取归一化资源列表（含精品资源）
   resourcesByKind: (kind: ResourceKind) => NormalizedResource[]
   // 资源中心：创建各类资源（进库，未挂载）
-  addQuestion: (q: Omit<Question, "id" | "updatedAt" | "chapterMounts">) => void
+  addQuestion: (
+    q: Omit<Question, "id" | "updatedAt" | "chapterMounts"> & {
+      chapterMounts?: Question["chapterMounts"]
+    },
+  ) => void
   addAssignment: (
     a: Omit<Assignment, "id" | "updatedAt" | "chapterMounts" | "textbookIds" | "status">,
   ) => void
@@ -277,7 +281,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
       addQuestion: (q) =>
         setQuestions((prev) => [
-          { ...q, id: nextId("q"), chapterMounts: [], updatedAt: today() } as Question,
+          {
+            ...q,
+            id: nextId("q"),
+            chapterMounts: (q as Partial<Question>).chapterMounts ?? [],
+            updatedAt: today(),
+          } as Question,
           ...prev,
         ]),
       addAssignment: (a) =>
