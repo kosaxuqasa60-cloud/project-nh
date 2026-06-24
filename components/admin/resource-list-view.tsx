@@ -1,0 +1,491 @@
+"use client"
+
+import { useMemo, useState } from "react"
+import { toast } from "sonner"
+import Link from "next/link"
+import { LayoutGrid, List, Plus, Search, X } from "lucide-react"
+import { PageHeader } from "@/components/admin/page-header"
+import { ResourceFormDialog } from "@/components/admin/resource-form-dialog"
+import { ResourceCompactRow } from "@/components/admin/resource-card"
+import { QuestionCard, MediaCard, PremiumCard } from "@/components/admin/rich-resource-card"
+import { buildRow, type AdminResourceRow } from "@/components/admin/resource-shared"
+import { BatchLevelDialog } from "@/components/admin/batch-level-dialog"
+import { Button, buttonVariants } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Checkbox } from "@/components/ui/checkbox"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { cn } from "@/lib/utils"
+import { useStore } from "@/lib/store"
+import {
+  QUESTION_TYPE_LABELS,
+  RESOURCE_KIND_LABELS,
+  RESOURCE_LEVEL_LABELS,
+  RESOURCE_LEVELS,
+  type AirClass,
+  type Assignment,
+  type Microlesson,
+  type Premium,
+  type Question,
+  type QuestionType,
+  type ResourceKind,
+  type ResourceLevel,
+} from "@/lib/types"
+
+type AnyResource = Question | Assignment | Microlesson | AirClass | Premium
+
+const QUESTION_TYPES: QuestionType[] = ["single", "multiple", "fill", "judge", "subjective"]
+
+const LEVEL_DOT: Record<ResourceLevel, string> = {
+  city: "bg-chart-4",
+  district: "bg-chart-2",
+  school: "bg-chart-1",
+}
+
+export function ResourceListView({
+  kind,
+  title,
+  description,
+  onCreateHref,
+}: {
+  kind: ResourceKind
+  title: string
+  description: string
+  // 题库使用整页新增，传入跳转地址；其余类型用弹窗
+  onCreateHref?: string
+}) {
+  const {
+    questions,
+    assignments,
+    microlessons,
+    airClasses,
+    premiums,
+    knowledgePoints,
+    mountCountByResource,
+    removeResource,
+    batchRemoveResources,
+  } = useStore()
+
+  const kpLabel = useMemo(() => {
+    const map = new Map(knowledgePoints.map((k) => [k.id, k.name]))
+    return (id: string) => map.get(id) ?? id
+  }, [knowledgePoints])
+
+  const [levelFilter, setLevelFilter] = useState<ResourceLevel | "all">("all")
+  const [questionType, setQuestionType] = useState<QuestionType | "all">("all")
+  const [mountStatus, setMountStatus] = useState<"all" | "mounted" | "unmounted">("all")
+  const [keyword, setKeyword] = useState("")
+  const [view, setView] = useState<"card" | "compact">("card")
+  const [moreOpen, setMoreOpen] = useState(false)
+
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [formOpen, setFormOpen] = useState(false)
+  const [editing, setEditing] = useState<AnyResource | null>(null)
+  const [batchLevelOpen, setBatchLevelOpen] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string; mounts: number } | null>(null)
+  const [batchDeleteOpen, setBatchDeleteOpen] = useState(false)
+
+  const rawList: AnyResource[] = useMemo(() => {
+    if (kind === "question") return questions
+    if (kind === "assignment") return assignments
+    if (kind === "microlesson") return microlessons
+    if (kind === "premium") return premiums
+    return airClasses
+  }, [kind, questions, assignments, microlessons, airClasses, premiums])
+
+  const kindLabel = RESOURCE_KIND_LABELS[kind]
+
+  const countByLevel = useMemo(() => {
+    const m: Record<string, number> = { all: rawList.length }
+    for (const l of RESOURCE_LEVELS) m[l] = 0
+    for (const r of rawList) m[r.level] += 1
+    return m
+  }, [rawList])
+
+  function matches(r: AnyResource) {
+    if (levelFilter !== "all" && r.level !== levelFilter) return false
+    if (kind === "question" && questionType !== "all" && (r as Question).type !== questionType)
+      return false
+    const mounts = r.chapterMounts.length
+    if (mountStatus === "mounted" && mounts === 0) return false
+    if (mountStatus === "unmounted" && mounts > 0) return false
+    const title = kind === "question" ? (r as Question).stem : (r as { title: string }).title
+    if (keyword && !title.includes(keyword)) return false
+    return true
+  }
+
+  const filteredRaw: AnyResource[] = useMemo(
+    () => rawList.filter(matches),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rawList, kind, levelFilter, questionType, mountStatus, keyword],
+  )
+
+  const rows: AdminResourceRow[] = useMemo(
+    () => filteredRaw.map((r) => buildRow(kind, r, kpLabel, mountCountByResource(kind, r.id))),
+    [filteredRaw, kind, kpLabel, mountCountByResource],
+  )
+
+  const allSelected = rows.length > 0 && rows.every((r) => selected.has(r.id))
+  const someSelected = selected.size > 0
+
+  function toggleSelect(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+  function toggleSelectAll() {
+    setSelected(() => (allSelected ? new Set() : new Set(rows.map((r) => r.id))))
+  }
+
+  function openCreate() {
+    setEditing(null)
+    setFormOpen(true)
+  }
+  function openEdit(id: string) {
+    setEditing(rawList.find((r) => r.id === id) ?? null)
+    setFormOpen(true)
+  }
+  function confirmDelete() {
+    if (!deleteTarget) return
+    removeResource(kind, deleteTarget.id)
+    toast.success(`已删除${kindLabel}`, {
+      description: deleteTarget.mounts > 0 ? `并解除了 ${deleteTarget.mounts} 处章节挂载` : undefined,
+    })
+    setDeleteTarget(null)
+  }
+  function confirmBatchDelete() {
+    const ids = [...selected]
+    batchRemoveResources(kind, ids)
+    toast.success(`已删除 ${ids.length} 个${kindLabel}`)
+    setSelected(new Set())
+    setBatchDeleteOpen(false)
+  }
+
+  const hasFilter =
+    levelFilter !== "all" || questionType !== "all" || mountStatus !== "all" || keyword !== ""
+
+  return (
+    <div>
+      <PageHeader
+        title={title}
+        description={description}
+        actions={
+          onCreateHref ? (
+            <Link href={onCreateHref} className={cn(buttonVariants(), "gap-1")}>
+              <Plus className="size-4" /> 新建{kindLabel}
+            </Link>
+          ) : (
+            <Button onClick={openCreate}>
+              <Plus className="size-4" /> 新建{kindLabel}
+            </Button>
+          )
+        }
+      />
+
+      <div className="flex gap-5">
+        {/* 左侧：授权范围（级别）分面 */}
+        <aside className="hidden w-52 shrink-0 lg:block">
+          <div className="rounded-lg border border-border bg-card p-2">
+            <p className="px-2 py-1.5 text-xs font-medium text-muted-foreground">授权范围 / 级别</p>
+            <FacetItem
+              label="全部级别"
+              count={countByLevel.all}
+              active={levelFilter === "all"}
+              onClick={() => setLevelFilter("all")}
+            />
+            {RESOURCE_LEVELS.map((l) => (
+              <FacetItem
+                key={l}
+                label={RESOURCE_LEVEL_LABELS[l]}
+                count={countByLevel[l]}
+                active={levelFilter === l}
+                onClick={() => setLevelFilter(l)}
+                dotClass={LEVEL_DOT[l]}
+              />
+            ))}
+          </div>
+          <p className="mt-3 px-2 text-xs leading-relaxed text-muted-foreground">
+            市级资源在所属市内全部学校可见，区级在区内可见，校级仅本校可见。
+          </p>
+        </aside>
+
+        {/* 右侧：筛选 + 列表 */}
+        <div className="min-w-0 flex-1">
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={keyword}
+                onChange={(e) => setKeyword(e.target.value)}
+                placeholder={kind === "question" ? "搜索题干 / 知识点" : "搜索标题"}
+                className="h-9 w-64 pl-8"
+              />
+            </div>
+            <Button
+              variant={mountStatus === "all" ? "secondary" : "ghost"}
+              size="sm"
+              className="h-9"
+              onClick={() => setMountStatus("all")}
+            >
+              全部
+            </Button>
+            <Button
+              variant={mountStatus === "mounted" ? "secondary" : "ghost"}
+              size="sm"
+              className="h-9"
+              onClick={() => setMountStatus("mounted")}
+            >
+              已挂载
+            </Button>
+            <Button
+              variant={mountStatus === "unmounted" ? "secondary" : "ghost"}
+              size="sm"
+              className="h-9"
+              onClick={() => setMountStatus("unmounted")}
+            >
+              未挂载
+            </Button>
+            {kind === "question" && (
+              <Button variant="ghost" size="sm" className="h-9" onClick={() => setMoreOpen((v) => !v)}>
+                更多筛选
+              </Button>
+            )}
+
+            <div className="ml-auto flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">共 {rows.length} 条</span>
+              <div className="flex rounded-md border border-border p-0.5">
+                <button
+                  onClick={() => setView("card")}
+                  className={cn(
+                    "rounded p-1.5",
+                    view === "card" ? "bg-secondary text-foreground" : "text-muted-foreground",
+                  )}
+                  aria-label="详情视图"
+                >
+                  <LayoutGrid className="size-4" />
+                </button>
+                <button
+                  onClick={() => setView("compact")}
+                  className={cn(
+                    "rounded p-1.5",
+                    view === "compact" ? "bg-secondary text-foreground" : "text-muted-foreground",
+                  )}
+                  aria-label="精简视图"
+                >
+                  <List className="size-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {kind === "question" && moreOpen && (
+            <div className="mb-3 flex flex-wrap items-center gap-1.5 rounded-md border border-border bg-muted/20 p-2">
+              <span className="px-1 text-xs text-muted-foreground">题型</span>
+              <FilterChip label="全部" active={questionType === "all"} onClick={() => setQuestionType("all")} />
+              {QUESTION_TYPES.map((t) => (
+                <FilterChip
+                  key={t}
+                  label={QUESTION_TYPE_LABELS[t]}
+                  active={questionType === t}
+                  onClick={() => setQuestionType(t)}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* 批量操作工具条 */}
+          <div className="mb-3 flex items-center gap-3 rounded-md border border-border bg-muted/20 px-3 py-2">
+            <Checkbox checked={allSelected} onCheckedChange={toggleSelectAll} />
+            <span className="text-sm text-muted-foreground">
+              {someSelected ? `已选 ${selected.size} 项` : "全选"}
+            </span>
+            {someSelected && (
+              <div className="ml-auto flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => setBatchLevelOpen(true)}>
+                  批量改级别
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => setBatchDeleteOpen(true)}
+                >
+                  批量删除
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
+                  <X className="size-4" /> 清除
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {/* 列表 */}
+          {rows.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-border py-16 text-center text-sm text-muted-foreground">
+              {hasFilter ? "没有符合筛选条件的资源。" : `还没有${kindLabel}，点右上角「新建」开始创建。`}
+            </div>
+          ) : view === "card" ? (
+            <div className="space-y-3">
+              {filteredRaw.map((r, i) =>
+                kind === "question" ? (
+                  <QuestionCard
+                    key={r.id}
+                    q={r as Question}
+                    index={i + 1}
+                    selected={selected.has(r.id)}
+                    onToggleSelect={() => toggleSelect(r.id)}
+                    onEdit={() => openEdit(r.id)}
+                  />
+                ) : kind === "premium" ? (
+                  <PremiumCard
+                    key={r.id}
+                    data={r as Premium}
+                    index={i + 1}
+                    selected={selected.has(r.id)}
+                    onToggleSelect={() => toggleSelect(r.id)}
+                    onEdit={() => openEdit(r.id)}
+                  />
+                ) : (
+                  <MediaCard
+                    key={r.id}
+                    kind={kind as "assignment" | "microlesson" | "airclass"}
+                    data={r as Assignment | Microlesson | AirClass}
+                    index={i + 1}
+                    selected={selected.has(r.id)}
+                    onToggleSelect={() => toggleSelect(r.id)}
+                    onEdit={() => openEdit(r.id)}
+                  />
+                ),
+              )}
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-lg border border-border bg-card">
+              {rows.map((r) => (
+                <ResourceCompactRow
+                  key={r.id}
+                  row={r}
+                  selected={selected.has(r.id)}
+                  onToggleSelect={() => toggleSelect(r.id)}
+                  onEdit={() => openEdit(r.id)}
+                  onDelete={() => setDeleteTarget({ id: r.id, title: r.title, mounts: r.mounts })}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {formOpen && (
+        <ResourceFormDialog kind={kind} open={formOpen} onOpenChange={setFormOpen} editing={editing} />
+      )}
+
+      <BatchLevelDialog
+        kind={kind}
+        ids={[...selected]}
+        open={batchLevelOpen}
+        onOpenChange={setBatchLevelOpen}
+        onDone={() => setSelected(new Set())}
+      />
+
+      <Dialog open={Boolean(deleteTarget)} onOpenChange={(v) => !v && setDeleteTarget(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>删除{kindLabel}</DialogTitle>
+            <DialogDescription>
+              确认删除「{deleteTarget?.title}」？
+              {deleteTarget && deleteTarget.mounts > 0
+                ? ` 该资源当前挂载在 ${deleteTarget.mounts} 处章节，删除后会一并解除。`
+                : " 此操作不可撤销。"}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteTarget(null)}>
+              取消
+            </Button>
+            <Button variant="destructive" onClick={confirmDelete}>
+              确认删除
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={batchDeleteOpen} onOpenChange={setBatchDeleteOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>批量删除</DialogTitle>
+            <DialogDescription>
+              确认删除选中的 {selected.size} 个{kindLabel}？其挂载关系会一并解除，此操作不可撤销。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBatchDeleteOpen(false)}>
+              取消
+            </Button>
+            <Button variant="destructive" onClick={confirmBatchDelete}>
+              确认删除
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
+function FacetItem({
+  label,
+  count,
+  active,
+  onClick,
+  dotClass,
+}: {
+  label: string
+  count: number
+  active: boolean
+  onClick: () => void
+  dotClass?: string
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
+        active ? "bg-secondary font-medium text-foreground" : "text-muted-foreground hover:bg-muted",
+      )}
+    >
+      {dotClass ? <span className={cn("size-2 rounded-full", dotClass)} /> : <span className="size-2" />}
+      <span className="flex-1 text-left">{label}</span>
+      <span className="text-xs tabular-nums text-muted-foreground">{count}</span>
+    </button>
+  )
+}
+
+function FilterChip({
+  label,
+  active,
+  onClick,
+}: {
+  label: string
+  active: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "rounded-md px-2.5 py-1 text-xs transition-colors",
+        active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted",
+      )}
+    >
+      {label}
+    </button>
+  )
+}

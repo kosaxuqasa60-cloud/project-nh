@@ -1,12 +1,14 @@
+import { PREMIUM_CATEGORY_LABELS } from "@/lib/types"
 import type {
   AirClass,
   Assignment,
   Difficulty,
   Microlesson,
+  Premium,
   Question,
   QuestionType,
+  ResourceKind,
   ResourceLevel,
-  SyncResourceType,
 } from "@/lib/types"
 
 // 难度 1-5 → 易/中/难（对齐教师端三档显示）
@@ -23,7 +25,7 @@ export { RESOURCE_LEVEL_LABELS } from "@/lib/types"
 // 管理端列表统一行模型：四类资源归一 + 卡片展示所需的派生字段
 export interface AdminResourceRow {
   id: string
-  kind: SyncResourceType
+  kind: ResourceKind
   title: string
   subject: string
   level: ResourceLevel
@@ -39,8 +41,8 @@ export interface AdminResourceRow {
 }
 
 export function buildRow(
-  kind: SyncResourceType,
-  raw: Question | Assignment | Microlesson | AirClass,
+  kind: ResourceKind,
+  raw: Question | Assignment | Microlesson | AirClass | Premium,
   kpLabel: (id: string) => string,
   mounts: number,
 ): AdminResourceRow {
@@ -82,6 +84,15 @@ export function buildRow(
       knowledgePointLabels: m.knowledgePointIds.map(kpLabel),
       hasVideo: Boolean(m.videoUrl) || true,
       metaLine: `时长 ${m.duration}`,
+    }
+  }
+  if (kind === "premium") {
+    const p = raw as Premium
+    return {
+      ...base,
+      title: p.title,
+      knowledgePointLabels: p.knowledgePointIds.map(kpLabel),
+      metaLine: `${PREMIUM_CATEGORY_LABELS[p.category]} · ${p.questionIds.length} 题`,
     }
   }
   const ac = raw as AirClass

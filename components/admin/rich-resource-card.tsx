@@ -9,6 +9,7 @@ import {
   Users,
   Layers,
   Eye,
+  Crown,
   Clapperboard,
   ClipboardList,
 } from "lucide-react"
@@ -19,10 +20,12 @@ import { MathText } from "@/components/admin/math-text"
 import { useStore } from "@/lib/store"
 import {
   difficultyTier,
+  PREMIUM_CATEGORY_LABELS,
   QUESTION_TYPE_LABELS,
   type Assignment,
   type AirClass,
   type Microlesson,
+  type Premium,
   type Question,
 } from "@/lib/types"
 
@@ -222,6 +225,88 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     <div className="flex gap-2">
       <dt className="shrink-0 text-muted-foreground">{label}</dt>
       <dd className="min-w-0 text-foreground">{children}</dd>
+    </div>
+  )
+}
+
+/* ----------------------------- 精品资源卡 ----------------------------- */
+
+export function PremiumCard({
+  data,
+  index,
+  selected,
+  onToggleSelect,
+  onEdit,
+  onMount,
+}: {
+  data: Premium
+  index: number
+  selected?: boolean
+  onToggleSelect?: () => void
+  onEdit?: () => void
+  onMount?: () => void
+}) {
+  const { knowledgePoints } = useStore()
+  const kpName = (id: string) => knowledgePoints.find((k) => k.id === id)?.name ?? id
+
+  return (
+    <div
+      className={cn(
+        "flex gap-3 rounded-xl border bg-card p-4 transition",
+        selected ? "border-brand ring-1 ring-brand/30" : "border-border hover:border-brand/40",
+      )}
+    >
+      <SelectBox selected={selected} onToggle={onToggleSelect} />
+      <span className="mt-0.5 text-sm font-semibold text-muted-foreground">{index}</span>
+      <span className="mt-0.5 grid size-9 shrink-0 place-items-center rounded-lg bg-warn/20 text-warn-foreground">
+        <Crown className="size-5" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+          <LevelChip level={data.level} />
+          <Pill className="bg-warn/15 text-warn-foreground">
+            {PREMIUM_CATEGORY_LABELS[data.category]}
+          </Pill>
+          <span className="truncate text-sm font-medium text-foreground">{data.title}</span>
+        </div>
+        {data.description && (
+          <p className="mb-1.5 line-clamp-1 text-xs text-muted-foreground">{data.description}</p>
+        )}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Pill className="bg-muted text-muted-foreground">
+            <Layers className="size-3" />
+            {data.questionIds.length} 题
+          </Pill>
+          {data.usedCount != null && (
+            <span className="text-[11px] text-muted-foreground">使用 {data.usedCount} 次</span>
+          )}
+          {data.knowledgePointIds.map((id) => (
+            <span key={id} className="text-[11px] text-brand">
+              #{kpName(id)}
+            </span>
+          ))}
+        </div>
+      </div>
+      <div className="flex shrink-0 items-center gap-1">
+        {onEdit && (
+          <button
+            onClick={onEdit}
+            className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-foreground transition hover:bg-muted"
+          >
+            <Pencil className="size-3" />
+            编辑
+          </button>
+        )}
+        {onMount && (
+          <button
+            onClick={onMount}
+            className="inline-flex items-center gap-1 rounded-md bg-brand px-2 py-1 text-xs font-medium text-brand-foreground transition hover:opacity-90"
+          >
+            <Plus className="size-3" />
+            挂载
+          </button>
+        )}
+      </div>
     </div>
   )
 }

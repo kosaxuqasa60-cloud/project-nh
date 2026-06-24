@@ -29,7 +29,9 @@ import { useStore } from "@/lib/store"
 import {
   COGNITIVE_OPTIONS,
   LITERACY_OPTIONS,
+  PREMIUM_CATEGORY_LABELS,
   QUESTION_TYPE_LABELS,
+  RESOURCE_KIND_LABELS,
   RESOURCE_LEVEL_LABELS,
   RESOURCE_LEVELS,
   SCENE_OPTIONS,
@@ -39,13 +41,15 @@ import {
   type Assignment,
   type Difficulty,
   type Microlesson,
+  type Premium,
+  type PremiumCategory,
   type Question,
   type QuestionType,
+  type ResourceKind,
   type ResourceLevel,
-  type SyncResourceType,
 } from "@/lib/types"
 
-type AnyResource = Question | Assignment | Microlesson | AirClass
+type AnyResource = Question | Assignment | Microlesson | AirClass | Premium
 
 const DIFFICULTY_ITEMS: Record<string, string> = {
   "1": "①  入门",
@@ -61,7 +65,7 @@ export function ResourceFormDialog({
   onOpenChange,
   editing,
 }: {
-  kind: SyncResourceType
+  kind: ResourceKind
   open: boolean
   onOpenChange: (v: boolean) => void
   editing?: AnyResource | null
@@ -71,12 +75,13 @@ export function ResourceFormDialog({
     addAssignment,
     addMicrolesson,
     addAirClass,
+    addPremium,
     updateResource,
     knowledgePoints,
     questions,
   } = useStore()
   const isEdit = Boolean(editing)
-  const e = editing as Partial<Question & Assignment & Microlesson & AirClass> | undefined
+  const e = editing as Partial<Question & Assignment & Microlesson & AirClass & Premium> | undefined
 
   // 共享字段
   const [subject, setSubject] = useState(e?.subject ?? "数学")
@@ -111,8 +116,11 @@ export function ResourceFormDialog({
   const [teacher, setTeacher] = useState(e?.teacher ?? "")
   const [scheduledAt, setScheduledAt] = useState(e?.scheduledAt ?? "")
   const [liveUrl, setLiveUrl] = useState(e?.liveUrl ?? "")
+  // 精品资源
+  const [category, setCategory] = useState<PremiumCategory>(e?.category ?? "paper")
+  const [description, setDescription] = useState(e?.description ?? "")
 
-  const kindLabel = { question: "题目", assignment: "作业", microlesson: "微课", airclass: "空中课堂" }[kind]
+  const kindLabel = RESOURCE_KIND_LABELS[kind]
 
   // 知识点随学科联动
   const subjectKps = useMemo(
@@ -168,6 +176,8 @@ export function ResourceFormDialog({
       else if (kind === "assignment") Object.assign(patch, { title: title.trim(), questionIds })
       else if (kind === "microlesson")
         Object.assign(patch, { title: title.trim(), duration, videoUrl })
+      else if (kind === "premium")
+        Object.assign(patch, { title: title.trim(), category, description, questionIds })
       else Object.assign(patch, { title: title.trim(), teacher, scheduledAt, liveUrl })
       updateResource(kind, editing.id, patch)
       toast.success(`${kindLabel}已更新`)
@@ -186,6 +196,8 @@ export function ResourceFormDialog({
         addAssignment({ ...base, title: title.trim(), questionIds })
       else if (kind === "microlesson")
         addMicrolesson({ ...base, title: title.trim(), duration: duration || "00:00", videoUrl })
+      else if (kind === "premium")
+        addPremium({ ...base, title: title.trim(), category, description, questionIds })
       else addAirClass({ ...base, title: title.trim(), teacher, scheduledAt, liveUrl })
       toast.success(`已创建${kindLabel}`, { description: "资源已入库，可在教材章节中挂载使用" })
     }
@@ -370,6 +382,33 @@ export function ResourceFormDialog({
             </div>
           )}
 
+          {kind === "premium" && (
+            <>
+              <Field label="精品分类">
+                <Select
+                  value={category}
+                  onValueChange={(v) => setCategory(v as PremiumCategory)}
+                  items={PREMIUM_CATEGORY_LABELS}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {(Object.keys(PREMIUM_CATEGORY_LABELS) as PremiumCategory[]).map((c) => (
+                      <SelectItem key={c} value={c}>{PREMIUM_CATEGORY_LABELS[c]}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field label="简介">
+                <Textarea
+                  value={description}
+                  onChange={(ev) => setDescription(ev.target.value)}
+                  placeholder="可选：精品资源简介与适用说明"
+                  className="min-h-16"
+                />
+              </Field>
+            </>
+          )}
+
           {/* 学科 + 级别 + 归属 */}
           <div className="grid grid-cols-2 gap-4">
             <Field label="学科">
@@ -447,8 +486,8 @@ export function ResourceFormDialog({
             )}
           </Field>
 
-          {/* 作业：从题库选题组卷 */}
-          {kind === "assignment" && (
+          {/* 作业 / 精品：从题库选题组卷 */}
+          {(kind === "assignment" || kind === "premium") && (
             <Field label={`组卷选题（已选 ${questionIds.length} 道，来自${subject}题库）`}>
               <div className="max-h-52 space-y-1.5 overflow-y-auto rounded-md border border-border p-2">
                 {subjectQuestions.map((q) => {
