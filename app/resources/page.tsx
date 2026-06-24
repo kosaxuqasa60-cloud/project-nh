@@ -504,7 +504,6 @@ const LEVEL_DOT: Record<ResourceLevel, string> = {
   city: "bg-chart-4",
   district: "bg-chart-2",
   school: "bg-chart-1",
-  premium: "bg-chart-3",
 }
 
 function FacetItem({

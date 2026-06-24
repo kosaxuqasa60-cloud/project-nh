@@ -135,12 +135,12 @@ export function ResourceFormDialog({
     if (kind === "question" && !stem.trim()) return toast.error("请填写题干")
     if (kind !== "question" && !title.trim()) return toast.error(`请填写${kindLabel}标题`)
     if (kind === "airclass" && !teacher.trim()) return toast.error("请填写主讲教师")
-    if (level !== "premium" && !ownerScope) return toast.error("请选择归属（市/区/校）")
+    if (!ownerScope) return toast.error("请选择归属（市/区/校）")
 
     const base = {
       subject,
       level,
-      ownerScope: level === "premium" ? undefined : ownerScope,
+      ownerScope,
       knowledgePointIds: kpIds,
     }
 
@@ -408,22 +408,16 @@ export function ResourceFormDialog({
             </Field>
           </div>
 
-          {level === "premium" ? (
-            <p className="rounded-md border border-chart-4/30 bg-chart-4/10 px-3 py-2 text-xs text-foreground/80">
-              精品资源为平台官方出品，全员可见，仅平台管理员可创建。
-            </p>
-          ) : (
-            <Field label="归属" required>
-              <Select value={ownerScope} onValueChange={setOwnerScope}>
-                <SelectTrigger><SelectValue placeholder={`选择${RESOURCE_LEVEL_LABELS[level]}归属`} /></SelectTrigger>
-                <SelectContent>
-                  {SCOPE_OPTIONS[level as Exclude<ResourceLevel, "premium">].map((s) => (
-                    <SelectItem key={s} value={s}>{s}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-          )}
+          <Field label="归属" required>
+            <Select value={ownerScope} onValueChange={setOwnerScope}>
+              <SelectTrigger><SelectValue placeholder={`选择${RESOURCE_LEVEL_LABELS[level]}归属`} /></SelectTrigger>
+              <SelectContent>
+                {SCOPE_OPTIONS[level].map((s) => (
+                  <SelectItem key={s} value={s}>{s}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
 
           {/* 知识点（随学科联动） */}
           <Field label={`知识点（已选 ${kpIds.length}）`}>

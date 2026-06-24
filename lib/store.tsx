@@ -7,11 +7,12 @@ import {
   chapters as seedChapters,
   knowledgePoints as seedKnowledgePoints,
   microlessons as seedMicrolessons,
+  premiums as seedPremiums,
   questions as seedQuestions,
   syncLinks as seedSyncLinks,
   textbooks as seedTextbooks,
 } from "./mock-data"
-import { QUESTION_TYPE_LABELS } from "./types"
+import { PREMIUM_CATEGORY_LABELS, QUESTION_TYPE_LABELS } from "./types"
 import type {
   AirClass,
   Assignment,
@@ -20,7 +21,9 @@ import type {
   KnowledgePoint,
   Microlesson,
   NormalizedResource,
+  Premium,
   Question,
+  ResourceKind,
   ResourceLevel,
   SyncResourceType,
   Textbook,
@@ -33,6 +36,7 @@ interface StoreValue {
   assignments: Assignment[]
   microlessons: Microlesson[]
   airClasses: AirClass[]
+  premiums: Premium[]
   knowledgePoints: KnowledgePoint[]
   syncLinks: ChapterSyncLink[]
   addTextbook: (tb: Omit<Textbook, "id" | "updatedAt">) => Textbook
@@ -49,28 +53,29 @@ interface StoreValue {
   // 知识点
   addKnowledgePoint: (kp: Omit<KnowledgePoint, "id">) => void
   setChapterKnowledgePoints: (chapterId: string, kpIds: string[]) => void
-  // 通用资源：按类型取归一化资源列表
-  resourcesByKind: (kind: SyncResourceType) => NormalizedResource[]
-  // 资源中心：创建四类资源（进库，未挂载）
+  // 通用资源：按类型取归一化资源列表（含精品资源）
+  resourcesByKind: (kind: ResourceKind) => NormalizedResource[]
+  // 资源中心：创建各类资源（进库，未挂载）
   addQuestion: (q: Omit<Question, "id" | "updatedAt" | "chapterMounts">) => void
   addAssignment: (
     a: Omit<Assignment, "id" | "updatedAt" | "chapterMounts" | "textbookIds" | "status">,
   ) => void
   addMicrolesson: (m: Omit<Microlesson, "id" | "updatedAt" | "chapterMounts">) => void
   addAirClass: (a: Omit<AirClass, "id" | "updatedAt" | "chapterMounts">) => void
+  addPremium: (p: Omit<Premium, "id" | "updatedAt" | "chapterMounts">) => void
   // 资源中心：编辑 / 删除（删除会一并解除所有章节挂载）
-  updateResource: (kind: SyncResourceType, id: string, patch: Record<string, unknown>) => void
-  removeResource: (kind: SyncResourceType, id: string) => void
+  updateResource: (kind: ResourceKind, id: string, patch: Record<string, unknown>) => void
+  removeResource: (kind: ResourceKind, id: string) => void
   // 资源中心：批量管理
   batchUpdateLevel: (
-    kind: SyncResourceType,
+    kind: ResourceKind,
     ids: string[],
     level: ResourceLevel,
     ownerScope?: string,
   ) => void
-  batchRemoveResources: (kind: SyncResourceType, ids: string[]) => void
+  batchRemoveResources: (kind: ResourceKind, ids: string[]) => void
   // 某资源被挂载到的章节锚点数量（资源中心列表用）
-  mountCountByResource: (kind: SyncResourceType, id: string) => number
+  mountCountByResource: (kind: ResourceKind, id: string) => number
   // 批量挂载：把一批资源挂入某教材的某章节
   batchMountResources: (
     kind: SyncResourceType,
@@ -116,6 +121,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [assignments, setAssignments] = useState<Assignment[]>(seedAssignments)
   const [microlessons, setMicrolessons] = useState<Microlesson[]>(seedMicrolessons)
   const [airClasses, setAirClasses] = useState<AirClass[]>(seedAirClasses)
+  const [premiums, setPremiums] = useState<Premium[]>(seedPremiums)
   const [knowledgePoints, setKnowledgePoints] =
     useState<KnowledgePoint[]>(seedKnowledgePoints)
   const [syncLinks, setSyncLinks] = useState<ChapterSyncLink[]>(seedSyncLinks)
@@ -149,6 +155,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       assignments,
       microlessons,
       airClasses,
+      premiums,
       knowledgePoints,
       syncLinks,
       addTextbook: (tb) => {
@@ -243,6 +250,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             knowledgePointIds: m.knowledgePointIds,
             chapterMounts: m.chapterMounts,
           }))
+        if (kind === "premium")
+          return premiums.map<NormalizedResource>((p) => ({
+            id: p.id,
+            kind: "premium",
+            title: p.title,
+            subtitle: PREMIUM_CATEGORY_LABELS[p.category],
+            subject: p.subject,
+            level: p.level,
+            ownerScope: p.ownerScope,
+            knowledgePointIds: p.knowledgePointIds,
+            chapterMounts: p.chapterMounts,
+          }))
         return airClasses.map<NormalizedResource>((a) => ({
           id: a.id,
           kind,
@@ -283,6 +302,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           { ...a, id: nextId("ac"), chapterMounts: [], updatedAt: today() } as AirClass,
           ...prev,
         ]),
+      addPremium: (p) =>
+        setPremiums((prev) => [
+          { ...p, id: nextId("pm"), chapterMounts: [], updatedAt: today() } as Premium,
+          ...prev,
+        ]),
 
       updateResource: (kind, id, patch) => {
         const apply = <T extends { id: string }>(p: T[]) =>
@@ -290,12 +314,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (kind === "question") setQuestions((p) => apply(p))
         else if (kind === "assignment") setAssignments((p) => apply(p))
         else if (kind === "microlesson") setMicrolessons((p) => apply(p))
+        else if (kind === "premium") setPremiums((p) => apply(p))
         else setAirClasses((p) => apply(p))
       },
       removeResource: (kind, id) => {
         if (kind === "question") setQuestions((p) => p.filter((r) => r.id !== id))
         else if (kind === "assignment") setAssignments((p) => p.filter((r) => r.id !== id))
         else if (kind === "microlesson") setMicrolessons((p) => p.filter((r) => r.id !== id))
+        else if (kind === "premium") setPremiums((p) => p.filter((r) => r.id !== id))
         else setAirClasses((p) => p.filter((r) => r.id !== id))
       },
       mountCountByResource: (kind, id) => {
@@ -306,20 +332,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               ? assignments
               : kind === "microlesson"
                 ? microlessons
-                : airClasses
+                : kind === "premium"
+                  ? premiums
+                  : airClasses
         return list.find((r) => r.id === id)?.chapterMounts.length ?? 0
       },
 
       batchUpdateLevel: (kind, ids, level, ownerScope) => {
         const idSet = new Set(ids)
-        const scope = level === "premium" ? undefined : ownerScope
         const apply = <T extends { id: string }>(p: T[]) =>
           p.map((r) =>
-            idSet.has(r.id) ? { ...r, level, ownerScope: scope, updatedAt: today() } : r,
+            idSet.has(r.id) ? { ...r, level, ownerScope, updatedAt: today() } : r,
           )
         if (kind === "question") setQuestions((p) => apply(p))
         else if (kind === "assignment") setAssignments((p) => apply(p))
         else if (kind === "microlesson") setMicrolessons((p) => apply(p))
+        else if (kind === "premium") setPremiums((p) => apply(p))
         else setAirClasses((p) => apply(p))
       },
       batchRemoveResources: (kind, ids) => {
@@ -328,6 +356,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (kind === "question") setQuestions((p) => filterOut(p))
         else if (kind === "assignment") setAssignments((p) => filterOut(p))
         else if (kind === "microlesson") setMicrolessons((p) => filterOut(p))
+        else if (kind === "premium") setPremiums((p) => filterOut(p))
         else setAirClasses((p) => filterOut(p))
       },
 
@@ -420,6 +449,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       assignments,
       microlessons,
       airClasses,
+      premiums,
       knowledgePoints,
       syncLinks,
     ],
