@@ -1,10 +1,10 @@
 "use client"
 
-import { useMemo, useState } from "react"
-import { useRouter } from "next/navigation"
+import { Suspense, useMemo, useState } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { toast } from "sonner"
-import { ArrowLeft, Check, Plus, X } from "lucide-react"
+import { ArrowLeft, Check, Loader2, Plus, Sparkles, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useStore } from "@/lib/store"
 import { MathText } from "@/components/admin/math-text"
@@ -35,11 +35,25 @@ const DIFFICULTIES: Difficulty[] = [1, 2, 3, 4, 5]
 const OPTION_KEYS = ["A", "B", "C", "D", "E", "F"]
 
 export default function NewQuestionPage() {
+  return (
+    <Suspense fallback={<div className="px-4 py-6 text-sm text-muted-foreground">加载中…</div>}>
+      <NewQuestionInner />
+    </Suspense>
+  )
+}
+
+function NewQuestionInner() {
   const router = useRouter()
+  const params = useSearchParams()
   const { addQuestion, knowledgePoints, textbooks, chapters } = useStore()
 
+  // 教材已在外部确定：从 URL 读取，缺省回退首本
+  const textbookId = params.get("textbook") || textbooks[0]?.id || ""
+  const textbook = textbooks.find((t) => t.id === textbookId)
+  const presetChapter = params.get("chapter") || ""
+
   // —— 题目内容 ——
-  const [subject, setSubject] = useState("数学")
+  const [subject, setSubject] = useState(textbook?.subject ?? "数学")
   const [type, setType] = useState<QuestionType>("single")
   const [difficulty, setDifficulty] = useState<Difficulty>(2)
   const [stem, setStem] = useState("")
@@ -62,10 +76,12 @@ export default function NewQuestionPage() {
   const [scene, setScene] = useState("")
   const [teachTags, setTeachTags] = useState<string[]>([])
   const [tagInput, setTagInput] = useState("")
+  const [aiGenerating, setAiGenerating] = useState(false)
 
-  // —— 章节挂载 ——
-  const [mountTextbookId, setMountTextbookId] = useState("")
-  const [mountChapterIds, setMountChapterIds] = useState<string[]>([])
+  // —— 章节挂载（教材固定，仅选章节）——
+  const [mountChapterIds, setMountChapterIds] = useState<string[]>(
+    presetChapter ? [presetChapter] : [],
+  )
 
   // —— 市/区/校级联授权 ——
   const [level, setLevel] = useState<ResourceLevel>("city")
@@ -76,18 +92,28 @@ export default function NewQuestionPage() {
 
   const isChoice = type === "single" || type === "multiple"
   const subjectKps = knowledgePoints.filter((k) => k.subject === subject)
+
+  // 当前教材的可挂载章节（含子章节，按层级缩进展示）
   const mountChapters = useMemo(
     () =>
       chapters
-        .filter((c) => c.textbookId === mountTextbookId && c.parentId !== null)
+        .filter((c) => c.textbookId === textbookId)
         .sort((a, b) => a.order - b.order),
-    [chapters, mountTextbookId],
+    [chapters, textbookId],
   )
+  const depthOf = (id: string): number => {
+    let d = 0
+    let cur = chapters.find((c) => c.id === id)
+    while (cur?.parentId) {
+      d++
+      cur = chapters.find((c) => c.id === cur!.parentId)
+    }
+    return d
+  }
 
   function toggle<T>(arr: T[], v: T, set: (n: T[]) => void) {
     set(arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v])
   }
-
   function updateOption(key: string, content: string) {
     setOptions((prev) => prev.map((o) => (o.key === key ? { ...o, content } : o)))
   }
@@ -99,13 +125,27 @@ export default function NewQuestionPage() {
     setOptions((prev) => prev.filter((o) => o.key !== key))
   }
 
+  // AI 生成标注（演示：依据题干模拟生成）
+  function handleAiGenerate() {
+    if (!stem.trim()) return toast.error("请先填写题干，AI 将据此生成标注")
+    setAiGenerating(true)
+    setTimeout(() => {
+      setLiteracy(LITERACY_OPTIONS.slice(0, 2))
+      setCognitive(COGNITIVE_OPTIONS[1] ?? COGNITIVE_OPTIONS[0])
+      setUsage(USAGE_OPTIONS.slice(0, 2))
+      setScene(SCENE_OPTIONS[0])
+      setTeachTags((p) => Array.from(new Set([...p, "AI 推荐", "易错点"])))
+      if (subjectKps.length) setKpIds((p) => (p.length ? p : [subjectKps[0].id]))
+      setAiGenerating(false)
+      toast.success("AI 已生成标注建议", { description: "可在此基础上手动调整" })
+    }, 1100)
+  }
+
   function handleSave() {
     if (!stem.trim()) return toast.error("请填写题干")
     if (!ownerScope) return toast.error("请完成市/区/校授权范围选择")
 
-    const chapterMounts = mountTextbookId
-      ? mountChapterIds.map((chapterId) => ({ textbookId: mountTextbookId, chapterId }))
-      : []
+    const chapterMounts = mountChapterIds.map((chapterId) => ({ textbookId, chapterId }))
 
     addQuestion({
       subject,
@@ -146,7 +186,9 @@ export default function NewQuestionPage() {
           </Link>
           <div>
             <h1 className="text-xl font-semibold text-foreground">新建题目</h1>
-            <p className="text-sm text-muted-foreground">填写题目内容并完成标注、授权与章节挂载</p>
+            <p className="text-sm text-muted-foreground">
+              {textbook ? `当前教材：${textbook.name}` : "填写题目内容并完成标注、授权与章节挂载"}
+            </p>
           </div>
         </div>
         <button
@@ -169,11 +211,7 @@ export default function NewQuestionPage() {
                 <Input value={subject} onChange={(e) => setSubject(e.target.value)} />
               </Labeled>
               <Labeled label="题型">
-                <Select
-                  value={type}
-                  onValueChange={(v) => setType(v as QuestionType)}
-                  items={QUESTION_TYPE_LABELS}
-                >
+                <Select value={type} onValueChange={(v) => setType(v as QuestionType)} items={QUESTION_TYPE_LABELS}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {QUESTION_TYPES.map((t) => (
@@ -213,7 +251,6 @@ export default function NewQuestionPage() {
               </div>
             )}
 
-            {/* 选项 */}
             {isChoice && (
               <div className="mt-4 space-y-2">
                 <p className="text-xs font-medium text-foreground">选项</p>
@@ -277,18 +314,24 @@ export default function NewQuestionPage() {
 
           {/* 系统标注 */}
           <section className="rounded-xl border border-border bg-card p-5">
-            <h2 className="mb-4 text-sm font-semibold text-foreground">系统标注</h2>
+            <div className="mb-4 flex items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold text-foreground">系统标注</h2>
+              <button
+                onClick={handleAiGenerate}
+                disabled={aiGenerating}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-brand/40 bg-brand-soft px-3 py-1.5 text-xs font-medium text-brand-soft-foreground transition hover:bg-brand-soft/70 disabled:opacity-60"
+              >
+                {aiGenerating ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
+                {aiGenerating ? "生成中…" : "AI 生成标注"}
+              </button>
+            </div>
             <div className="space-y-4">
               <Labeled label={`核心素养（已选 ${literacy.length}）`}>
                 <Chips options={LITERACY_OPTIONS} value={literacy} onToggle={(v) => toggle(literacy, v, setLiteracy)} />
               </Labeled>
               <div className="grid gap-4 sm:grid-cols-2">
                 <Labeled label="认知层级">
-                  <Select
-                    value={cognitive}
-                    onValueChange={setCognitive}
-                    items={Object.fromEntries(COGNITIVE_OPTIONS.map((o) => [o, o]))}
-                  >
+                  <Select value={cognitive} onValueChange={setCognitive} items={Object.fromEntries(COGNITIVE_OPTIONS.map((o) => [o, o]))}>
                     <SelectTrigger><SelectValue placeholder="选择认知层级" /></SelectTrigger>
                     <SelectContent>
                       {COGNITIVE_OPTIONS.map((o) => (
@@ -298,11 +341,7 @@ export default function NewQuestionPage() {
                   </Select>
                 </Labeled>
                 <Labeled label="情景属性">
-                  <Select
-                    value={scene}
-                    onValueChange={setScene}
-                    items={Object.fromEntries(SCENE_OPTIONS.map((o) => [o, o]))}
-                  >
+                  <Select value={scene} onValueChange={setScene} items={Object.fromEntries(SCENE_OPTIONS.map((o) => [o, o]))}>
                     <SelectTrigger><SelectValue placeholder="选择情景属性" /></SelectTrigger>
                     <SelectContent>
                       {SCENE_OPTIONS.map((o) => (
@@ -389,54 +428,42 @@ export default function NewQuestionPage() {
 
           <section className="rounded-xl border border-border bg-card p-5">
             <h2 className="mb-1 text-sm font-semibold text-foreground">章节挂载</h2>
-            <p className="mb-4 text-xs text-muted-foreground">将题目挂入教材章节目录（可选，支持多选）</p>
-            <Select
-              value={mountTextbookId}
-              onValueChange={(v) => { setMountTextbookId(v); setMountChapterIds([]) }}
-              items={Object.fromEntries(textbooks.map((t) => [t.id, t.name]))}
-            >
-              <SelectTrigger className="mb-3"><SelectValue placeholder="选择教材" /></SelectTrigger>
-              <SelectContent>
-                {textbooks.map((t) => (
-                  <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {mountTextbookId ? (
-              mountChapters.length ? (
-                <div className="max-h-72 space-y-1 overflow-auto">
-                  {mountChapters.map((c) => {
-                    const checked = mountChapterIds.includes(c.id)
-                    return (
-                      <button
-                        key={c.id}
-                        type="button"
-                        onClick={() => toggle(mountChapterIds, c.id, setMountChapterIds)}
+            <p className="mb-4 text-xs text-muted-foreground">
+              {textbook ? `挂入「${textbook.name}」章节目录（可多选）` : "选择章节目录（可多选）"}
+            </p>
+            {mountChapters.length ? (
+              <div className="max-h-80 space-y-1 overflow-auto">
+                {mountChapters.map((c) => {
+                  const checked = mountChapterIds.includes(c.id)
+                  const depth = depthOf(c.id)
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => toggle(mountChapterIds, c.id, setMountChapterIds)}
+                      style={{ paddingLeft: depth * 14 + 12 }}
+                      className={cn(
+                        "flex w-full items-center gap-2 rounded-md border py-2 pr-3 text-left text-sm transition",
+                        checked
+                          ? "border-brand bg-brand-soft text-brand-soft-foreground"
+                          : "border-border text-foreground hover:bg-muted",
+                      )}
+                    >
+                      <span
                         className={cn(
-                          "flex w-full items-center gap-2 rounded-md border px-3 py-2 text-left text-sm transition",
-                          checked
-                            ? "border-brand bg-brand-soft text-brand-soft-foreground"
-                            : "border-border text-foreground hover:bg-muted",
+                          "grid size-4 shrink-0 place-items-center rounded border",
+                          checked ? "border-brand bg-brand text-brand-foreground" : "border-muted-foreground/40",
                         )}
                       >
-                        <span
-                          className={cn(
-                            "grid size-4 shrink-0 place-items-center rounded border",
-                            checked ? "border-brand bg-brand text-brand-foreground" : "border-muted-foreground/40",
-                          )}
-                        >
-                          {checked && <Check className="size-3" />}
-                        </span>
-                        {c.title}
-                      </button>
-                    )
-                  })}
-                </div>
-              ) : (
-                <p className="text-xs text-muted-foreground">该教材暂无章节</p>
-              )
+                        {checked && <Check className="size-3" />}
+                      </span>
+                      <span className="truncate">{c.title}</span>
+                    </button>
+                  )
+                })}
+              </div>
             ) : (
-              <p className="text-xs text-muted-foreground">请先选择教材</p>
+              <p className="text-xs text-muted-foreground">该教材暂无章节目录</p>
             )}
           </section>
         </aside>
