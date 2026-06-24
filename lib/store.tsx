@@ -55,9 +55,9 @@ interface StoreValue {
   setChapterKnowledgePoints: (chapterId: string, kpIds: string[]) => void
   // 通用资源：按类型取归一化资源列表（含精品资源）
   resourcesByKind: (kind: ResourceKind) => NormalizedResource[]
-  // 资源中心：创建各类资源（进库，未挂载）
+  // 资源中心：创建各类资源（进库，未挂载）；version/versions 由 store 自动初始化为 v1
   addQuestion: (
-    q: Omit<Question, "id" | "updatedAt" | "chapterMounts"> & {
+    q: Omit<Question, "id" | "updatedAt" | "chapterMounts" | "version" | "versions"> & {
       chapterMounts?: Question["chapterMounts"]
     },
   ) => void
@@ -67,6 +67,14 @@ interface StoreValue {
   addMicrolesson: (m: Omit<Microlesson, "id" | "updatedAt" | "chapterMounts">) => void
   addAirClass: (a: Omit<AirClass, "id" | "updatedAt" | "chapterMounts">) => void
   addPremium: (p: Omit<Premium, "id" | "updatedAt" | "chapterMounts">) => void
+  // 题目版本：另存为新版本（旧版本归档保留统计，新版本成为当前生效版本，统计清零）
+  saveQuestionAsNewVersion: (
+    familyId: string,
+    content: { stem: string; type: Question["type"]; options?: Question["options"]; answer?: string; analysis?: string },
+    changeNote: string,
+  ) => void
+  // 题目族级汇总统计（跨所有版本累计）
+  questionFamilyStats: (familyId: string) => { totalUsed: number; totalStudents: number; versionCount: number }
   // 资源中心：编辑 / 删除（删除会一并解除所有章节挂载）
   updateResource: (kind: ResourceKind, id: string, patch: Record<string, unknown>) => void
   removeResource: (kind: ResourceKind, id: string) => void
@@ -280,15 +288,35 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
 
       addQuestion: (q) =>
-        setQuestions((prev) => [
-          {
-            ...q,
-            id: nextId("q"),
-            chapterMounts: (q as Partial<Question>).chapterMounts ?? [],
-            updatedAt: today(),
-          } as Question,
-          ...prev,
-        ]),
+        setQuestions((prev) => {
+          const id = nextId("q")
+          const qq = q as Partial<Question>
+          // 新题目自带 v1（已发布），作为内容快照
+          const v1 = {
+            version: 1,
+            status: "published" as const,
+            stem: qq.stem ?? "",
+            type: qq.type ?? "single",
+            options: qq.options,
+            answer: qq.answer,
+            analysis: qq.analysis,
+            usedCount: 0,
+            studentCount: 0,
+            changeNote: "初始版本",
+            createdAt: today(),
+          }
+          return [
+            {
+              ...q,
+              id,
+              version: 1,
+              versions: [v1],
+              chapterMounts: qq.chapterMounts ?? [],
+              updatedAt: today(),
+            } as Question,
+            ...prev,
+          ]
+        }),
       addAssignment: (a) =>
         setAssignments((prev) => [
           {
@@ -316,6 +344,53 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           { ...p, id: nextId("pm"), chapterMounts: [], updatedAt: today() } as Premium,
           ...prev,
         ]),
+
+      saveQuestionAsNewVersion: (familyId, content, changeNote) =>
+        setQuestions((prev) =>
+          prev.map((q) => {
+            if (q.id !== familyId) return q
+            const nextVersion = Math.max(...q.versions.map((v) => v.version)) + 1
+            // 旧版本全部归档（保留各自统计），新版本成为当前生效版本、统计清零
+            const archived = q.versions.map((v) => ({ ...v, status: "archived" as const }))
+            const newVer = {
+              version: nextVersion,
+              status: "published" as const,
+              stem: content.stem,
+              type: content.type,
+              options: content.options,
+              answer: content.answer,
+              analysis: content.analysis,
+              usedCount: 0,
+              studentCount: 0,
+              changeNote: changeNote || `修订为 v${nextVersion}`,
+              createdAt: today(),
+            }
+            return {
+              ...q,
+              // 顶层内容镜像新版本
+              stem: content.stem,
+              type: content.type,
+              options: content.options,
+              answer: content.answer,
+              analysis: content.analysis,
+              version: nextVersion,
+              versions: [...archived, newVer],
+              usedCount: 0,
+              studentCount: 0,
+              updatedAt: today(),
+            }
+          }),
+        ),
+
+      questionFamilyStats: (familyId) => {
+        const q = questions.find((x) => x.id === familyId)
+        if (!q) return { totalUsed: 0, totalStudents: 0, versionCount: 0 }
+        return {
+          totalUsed: q.versions.reduce((s, v) => s + (v.usedCount ?? 0), 0),
+          totalStudents: q.versions.reduce((s, v) => s + (v.studentCount ?? 0), 0),
+          versionCount: q.versions.length,
+        }
+      },
 
       updateResource: (kind, id, patch) => {
         const apply = <T extends { id: string }>(p: T[]) =>

@@ -7,6 +7,7 @@ import type {
   Microlesson,
   Premium,
   Question,
+  QuestionVersion,
   Textbook,
 } from "./types"
 
@@ -125,7 +126,8 @@ export const chapters: ChapterNode[] = [
 ]
 
 // 题目：打知识点标签，章节锚点可由知识点自动归集；带级别/归属
-export const questions: Question[] = [
+// rawQuestions 不含版本结构，下方 normalizeQuestion 会自动补 v1（含历史演示版本）
+const rawQuestions: Omit<Question, "version" | "versions">[] = [
   {
     id: "q-1",
     stem: "下列各数中，是负数的是（　）。",
@@ -294,6 +296,88 @@ export const questions: Question[] = [
     updatedAt: "2026-06-12",
   },
 ]
+
+// 为每道原始题目补一个 v1（镜像顶层内容与统计），使旧数据自然拥有版本结构
+function normalizeQuestion(raw: Omit<Question, "version" | "versions">): Question {
+  const v1: QuestionVersion = {
+    version: 1,
+    status: "published",
+    stem: raw.stem,
+    type: raw.type,
+    options: raw.options,
+    answer: raw.answer,
+    analysis: raw.analysis,
+    usedCount: raw.usedCount,
+    studentCount: raw.studentCount,
+    correctRate: undefined,
+    changeNote: "初始版本",
+    createdAt: raw.updatedAt,
+  }
+  return { ...raw, version: 1, versions: [v1] }
+}
+
+// 多版本演示：q-1 经历过一次修订（v1 表述不清 → v2 改好，正确率提升）
+const MULTI_VERSION: Record<string, QuestionVersion[]> = {
+  "q-1": [
+    {
+      version: 1,
+      status: "archived",
+      stem: "下列各数中，哪个是负数？",
+      type: "single",
+      options: [
+        { key: "A", content: "$-3$" },
+        { key: "B", content: "$0$" },
+        { key: "C", content: "$2.5$" },
+        { key: "D", content: "$|-1|$" },
+      ],
+      answer: "A",
+      analysis: "负数是小于 0 的数。",
+      usedCount: 120,
+      studentCount: 460,
+      correctRate: 63,
+      changeNote: "初始版本",
+      createdAt: "2026-03-10",
+    },
+    {
+      version: 2,
+      status: "published",
+      stem: "下列各数中，是负数的是（　）。",
+      type: "single",
+      options: [
+        { key: "A", content: "$-3$" },
+        { key: "B", content: "$0$" },
+        { key: "C", content: "$2.5$" },
+        { key: "D", content: "$|-1|$" },
+      ],
+      answer: "A",
+      analysis: "负数是小于 0 的数，$-3 < 0$，故选 A。",
+      usedCount: 206,
+      studentCount: 820,
+      correctRate: 81,
+      changeNote: "优化题干表述，明确选项作答方式，正确率由 63% 提升至 81%",
+      createdAt: "2026-05-20",
+    },
+  ],
+}
+
+export const questions: Question[] = rawQuestions.map((raw) => {
+  const multi = MULTI_VERSION[raw.id]
+  if (!multi) return normalizeQuestion(raw)
+  const current = multi[multi.length - 1]
+  return {
+    ...raw,
+    // 顶层内容/统计镜像当前版本
+    stem: current.stem,
+    type: current.type,
+    options: current.options,
+    answer: current.answer,
+    analysis: current.analysis,
+    usedCount: current.usedCount,
+    studentCount: current.studentCount,
+    version: current.version,
+    versions: multi,
+  }
+})
 
 // 教材同步关系：人教版（tb-1） ⇄ 北师大版（tb-2），逐目录手工对应
 export const syncLinks: ChapterSyncLink[] = [

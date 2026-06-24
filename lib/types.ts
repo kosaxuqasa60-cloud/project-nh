@@ -187,15 +187,44 @@ export const USAGE_OPTIONS = [
 ] // 教学用途
 export const SCENE_OPTIONS = ["纯数学情景", "生活情景", "跨学科情景"] // 情景属性
 
+// 题目版本状态：草稿 / 已发布（当前生效）/ 已归档（被新版本取代，仅保留统计可追溯）
+export type QuestionVersionStatus = "draft" | "published" | "archived"
+export const QUESTION_VERSION_STATUS_LABELS: Record<QuestionVersionStatus, string> = {
+  draft: "草稿",
+  published: "已发布",
+  archived: "已归档",
+}
+
+// 题目版本：某一时刻“内容”的不可变快照 + 该版本独立的作答统计
+// 内容字段（题干/题型/选项/答案/解析）一旦有学生作答，应另存为新版本而非就地改
+export interface QuestionVersion {
+  version: number // 版本号，从 1 递增
+  status: QuestionVersionStatus
+  // —— 内容快照 ——
+  stem: string
+  type: QuestionType
+  options?: { key: string; content: string }[]
+  answer?: string
+  analysis?: string
+  // —— 版本级统计（学生作答数据绑定到具体版本）——
+  usedCount?: number // 该版本被组卷次数
+  studentCount?: number // 该版本已练学生数
+  correctRate?: number // 该版本正确率 0-100
+  changeNote?: string // 修订说明（相对上一版本改了什么）
+  createdAt: string
+}
+
 export interface Question extends LeveledResource {
-  id: string
+  id: string // 题目族 ID：稳定的逻辑身份，统计顺着它汇总
+  // —— 当前生效版本的内容镜像（= versions 中 version===当前版本 的快照，便于向后兼容直接读取）——
   stem: string // 题干（支持 $...$ 公式）
   type: QuestionType
   subject: string
-  difficulty: Difficulty
   options?: { key: string; content: string }[] // 选项（选择题）
   answer?: string // 答案
   analysis?: string // 解析
+  // —— 族级元数据（可直接改，不产生新版本；难度归此类）——
+  difficulty: Difficulty
   // 题目打知识点标签 —— 这是归集与自动挂载的依据
   knowledgePointIds: string[]
   // 教师端标注维度
@@ -207,7 +236,10 @@ export interface Question extends LeveledResource {
   // 讲解资源
   videoTitle?: string
   videoDuration?: string
-  // 使用统计
+  // —— 版本 ——
+  version: number // 当前生效版本号
+  versions: QuestionVersion[] // 全部版本（含历史），按 version 升序
+  // —— 当前版本统计镜像（= 当前版本的统计，列表直接展示）——
   usedCount?: number // 组卷次数
   studentCount?: number // 已练学生数
   // 章节锚点：题目最终落在哪些章节（可由知识点自动归集，也可手工批量挂入）
@@ -215,12 +247,20 @@ export interface Question extends LeveledResource {
   updatedAt: string
 }
 
+// 题目引用（作业/精品用）：钉死到具体题目族的具体版本
+export interface QuestionRef {
+  familyId: string // = Question.id
+  version: number // 引用创建时钉死的版本
+}
+
 // 作业
 export interface Assignment extends LeveledResource {
   id: string
   title: string
   subject: string
-  questionIds: string[]
+  questionIds: string[] // 题目族 ID 列表（兼容旧引用）
+  // 钉死版本的引用：已发布作业永远指向创建时的版本，不随题目升级而变
+  questionVersions?: QuestionRef[]
   // 同样可以归属多个教材
   textbookIds: string[]
   // 章节锚点：作业也挂到具体章节
@@ -271,7 +311,8 @@ export interface Premium extends LeveledResource {
   subject: string
   category: PremiumCategory
   description?: string
-  questionIds: string[] // 精品试卷 / 专题包含的题目
+  questionIds: string[] // 精品试卷 / 专题包含的题目（题目族 ID）
+  questionVersions?: QuestionRef[] // 钉死版本的引用
   knowledgePointIds: string[]
   chapterMounts: { textbookId: string; chapterId: string }[]
   usedCount?: number

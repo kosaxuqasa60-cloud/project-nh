@@ -17,7 +17,8 @@ import {
 } from "lucide-react"
 import { ResourceFormDialog } from "@/components/admin/resource-form-dialog"
 import { ResourceCompactRow } from "@/components/admin/resource-card"
-import { QuestionCard } from "@/components/admin/rich-resource-card"
+ import { QuestionCard } from "@/components/admin/rich-resource-card"
+import { QuestionVersionSheet } from "@/components/admin/question-version-sheet"
 import { AiImportDialog } from "@/components/admin/ai-import-dialog"
 import { buildRow } from "@/components/admin/resource-shared"
 import { BatchLevelDialog } from "@/components/admin/batch-level-dialog"
@@ -89,6 +90,7 @@ export function QuestionLibraryView() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<Question | null>(null)
+  const [historyQ, setHistoryQ] = useState<Question | null>(null)
   const [batchLevelOpen, setBatchLevelOpen] = useState(false)
   const [aiOpen, setAiOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string; mounts: number } | null>(null)
@@ -462,6 +464,7 @@ export function QuestionLibraryView() {
                 selected={selected.has(q.id)}
                 onToggleSelect={() => toggleSelect(q.id)}
                 onEdit={() => openEdit(q.id)}
+                onHistory={() => setHistoryQ(q)}
               />
             ))}
           </div>
@@ -508,6 +511,12 @@ export function QuestionLibraryView() {
       {formOpen && (
         <ResourceFormDialog kind="question" open={formOpen} onOpenChange={setFormOpen} editing={editing} />
       )}
+
+      <QuestionVersionSheet
+        q={historyQ}
+        open={Boolean(historyQ)}
+        onOpenChange={(v) => !v && setHistoryQ(null)}
+      />
 
       <BatchLevelDialog
         kind="question"
