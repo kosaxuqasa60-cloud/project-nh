@@ -247,7 +247,7 @@ function NewQuestionInner() {
             {stem.includes("$") && (
               <div className="mt-2 rounded-md border border-border bg-muted/30 p-2 text-sm">
                 <span className="mr-2 text-xs text-muted-foreground">预览</span>
-                <MathText text={stem} />
+                <MathText>{stem}</MathText>
               </div>
             )}
 

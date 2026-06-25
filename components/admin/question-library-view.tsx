@@ -1,25 +1,25 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { toast } from "sonner"
 import {
   ChevronDown,
   ChevronRight,
   ChevronsUpDown,
+  FileSpreadsheet,
   LayoutGrid,
   List,
   Plus,
   Search,
   SlidersHorizontal,
-  Sparkles,
   X,
 } from "lucide-react"
 import { ResourceFormDialog } from "@/components/admin/resource-form-dialog"
 import { ResourceCompactRow } from "@/components/admin/resource-card"
  import { QuestionCard } from "@/components/admin/rich-resource-card"
 import { QuestionVersionSheet } from "@/components/admin/question-version-sheet"
-import { AiImportDialog } from "@/components/admin/ai-import-dialog"
+import { FileImportDialog } from "@/components/admin/file-import-dialog"
 import { buildRow } from "@/components/admin/resource-shared"
 import { BatchLevelDialog } from "@/components/admin/batch-level-dialog"
 import { Button, buttonVariants } from "@/components/ui/button"
@@ -40,16 +40,26 @@ import {
   QUESTION_TYPE_LABELS,
   RESOURCE_LEVEL_LABELS,
   RESOURCE_LEVELS,
+  VOLUME_LABELS,
   type ChapterNode,
   type Difficulty,
   type Question,
   type QuestionType,
   type ResourceLevel,
   type Textbook,
+  type Volume,
 } from "@/lib/types"
 
 const QUESTION_TYPES: QuestionType[] = ["single", "multiple", "fill", "judge", "subjective"]
 const DIFFICULTIES: Difficulty[] = [1, 2, 3, 4, 5]
+
+// 年级按学段分组：小学一年级 → 高三（与教材 grade 字段取值一致）
+const GRADE_GROUPS: { stage: string; grades: string[] }[] = [
+  { stage: "小学", grades: ["一年级", "二年级", "三年级", "四年级", "五年级", "六年级"] },
+  { stage: "初中", grades: ["七年级", "八年级", "九年级"] },
+  { stage: "高中", grades: ["高一", "高二", "高三"] },
+]
+const VOLUMES: Volume[] = ["upper", "lower", "full"]
 
 const LEVEL_DOT: Record<ResourceLevel, string> = {
   city: "bg-chart-4",
@@ -321,7 +331,7 @@ export function QuestionLibraryView() {
           </div>
           <div className="ml-auto flex items-center gap-2">
             <Button variant="outline" onClick={() => setAiOpen(true)}>
-              <Sparkles className="size-4" /> AI 导入
+              <FileSpreadsheet className="size-4" /> 文件导入
             </Button>
             <Link
               href={`/resources/questions/new?textbook=${textbookId}${chapterSel !== "all" && chapterSel !== "unmounted" ? `&chapter=${chapterSel}` : ""}`}
@@ -498,8 +508,8 @@ export function QuestionLibraryView() {
         }}
       />
 
-      {/* AI 导入 */}
-      <AiImportDialog
+      {/* 文件导入 */}
+      <FileImportDialog
         open={aiOpen}
         onOpenChange={setAiOpen}
         defaultSubject={textbook?.subject ?? "数学"}
@@ -575,42 +585,101 @@ function TextbookSwitchDialog({
   currentId: string
   onSelect: (id: string) => void
 }) {
+  const current = textbooks.find((t) => t.id === currentId)
+  const [grade, setGrade] = useState<string>(current?.grade ?? "")
+  const [vol, setVol] = useState<Volume | "all">("all")
+
+  // 切换教材弹窗打开时，默认对齐当前教材的年级
+  useEffect(() => {
+    if (open) setGrade(current?.grade ?? "")
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+
+  const filtered = textbooks.filter(
+    (t) => (!grade || t.grade === grade) && (vol === "all" || t.volume === vol),
+  )
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>切换教材</DialogTitle>
-          <DialogDescription>选择要浏览题库的教材版本。</DialogDescription>
+          <DialogDescription>先选择年级与学期，再选择对应的教材版本。</DialogDescription>
         </DialogHeader>
-        <div className="grid max-h-[60vh] gap-2 overflow-y-auto">
-          {textbooks.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => onSelect(t.id)}
-              className={cn(
-                "flex items-center gap-3 rounded-lg border p-2.5 text-left transition",
-                t.id === currentId
-                  ? "border-brand bg-brand-soft"
-                  : "border-border hover:border-brand/40 hover:bg-muted",
-              )}
-            >
-              <div className="h-14 w-10 shrink-0 overflow-hidden rounded-md ring-1 ring-border">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={t.cover || "/placeholder.svg"} alt="" className="size-full object-cover" />
+
+        {/* 年级选择：小学一年级 → 高三 */}
+        <div className="space-y-2.5">
+          {GRADE_GROUPS.map((g) => (
+            <div key={g.stage} className="flex items-start gap-3">
+              <span className="mt-1.5 w-10 shrink-0 text-xs font-medium text-muted-foreground">
+                {g.stage}
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {g.grades.map((gr) => (
+                  <FilterChip
+                    key={gr}
+                    label={gr}
+                    active={grade === gr}
+                    onClick={() => setGrade((p) => (p === gr ? "" : gr))}
+                  />
+                ))}
               </div>
-              <div className="min-w-0 flex-1">
-                <p className="line-clamp-1 text-sm font-medium text-foreground">{t.name}</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  {t.subject} · {t.version} · {t.grade}
-                </p>
-              </div>
-              {t.id === currentId && (
-                <span className="shrink-0 rounded-full bg-brand px-2 py-0.5 text-[11px] font-medium text-brand-foreground">
-                  当前
-                </span>
-              )}
-            </button>
+            </div>
           ))}
+          {/* 学期 / 册次 */}
+          <div className="flex items-center gap-3 border-t border-border pt-2.5">
+            <span className="w-10 shrink-0 text-xs font-medium text-muted-foreground">学期</span>
+            <div className="flex flex-wrap gap-1.5">
+              <FilterChip label="全部" active={vol === "all"} onClick={() => setVol("all")} />
+              {VOLUMES.map((v) => (
+                <FilterChip
+                  key={v}
+                  label={VOLUME_LABELS[v]}
+                  active={vol === v}
+                  onClick={() => setVol(v)}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* 匹配的教材列表 */}
+        <div className="mt-1 grid max-h-[44vh] gap-2 overflow-y-auto border-t border-border pt-3">
+          {filtered.length === 0 ? (
+            <p className="py-10 text-center text-sm text-muted-foreground">
+              {grade ? `「${grade}${vol === "all" ? "" : VOLUME_LABELS[vol]}」暂无教材` : "请先选择年级"}
+            </p>
+          ) : (
+            filtered.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => onSelect(t.id)}
+                className={cn(
+                  "flex items-center gap-3 rounded-lg border p-2.5 text-left transition",
+                  t.id === currentId
+                    ? "border-brand bg-brand-soft"
+                    : "border-border hover:border-brand/40 hover:bg-muted",
+                )}
+              >
+                <div className="h-14 w-10 shrink-0 overflow-hidden rounded-md ring-1 ring-border">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={t.cover || "/placeholder.svg"} alt="" className="size-full object-cover" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="line-clamp-1 text-sm font-medium text-foreground">{t.name}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {t.subject} · {t.version} · {t.grade}
+                    {t.volume ? VOLUME_LABELS[t.volume] : ""}
+                  </p>
+                </div>
+                {t.id === currentId && (
+                  <span className="shrink-0 rounded-full bg-brand px-2 py-0.5 text-[11px] font-medium text-brand-foreground">
+                    当前
+                  </span>
+                )}
+              </button>
+            ))
+          )}
         </div>
       </DialogContent>
     </Dialog>
