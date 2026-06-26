@@ -1,24 +1,27 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { toast } from "sonner"
 import {
+  Building2,
+  Check,
   ChevronDown,
   ChevronRight,
   ChevronsUpDown,
+  FileSpreadsheet,
   LayoutGrid,
   List,
   Plus,
   Search,
   SlidersHorizontal,
-  Sparkles,
   X,
 } from "lucide-react"
 import { ResourceFormDialog } from "@/components/admin/resource-form-dialog"
 import { ResourceCompactRow } from "@/components/admin/resource-card"
-import { QuestionCard } from "@/components/admin/rich-resource-card"
-import { AiImportDialog } from "@/components/admin/ai-import-dialog"
+ import { QuestionCard } from "@/components/admin/rich-resource-card"
+import { QuestionVersionSheet } from "@/components/admin/question-version-sheet"
+import { FileImportDialog } from "@/components/admin/file-import-dialog"
 import { buildRow } from "@/components/admin/resource-shared"
 import { BatchLevelDialog } from "@/components/admin/batch-level-dialog"
 import { Button, buttonVariants } from "@/components/ui/button"
@@ -32,23 +35,45 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
 import { useStore } from "@/lib/store"
 import {
   difficultyTier,
+  districtsOfCity,
+  ORG_TREE,
   QUESTION_TYPE_LABELS,
   RESOURCE_LEVEL_LABELS,
   RESOURCE_LEVELS,
+  resolveOrgScopeNames,
+  schoolsOfDistrict,
+  VOLUME_LABELS,
   type ChapterNode,
   type Difficulty,
+  type OrgContext,
   type Question,
   type QuestionType,
   type ResourceLevel,
   type Textbook,
+  type Volume,
 } from "@/lib/types"
 
 const QUESTION_TYPES: QuestionType[] = ["single", "multiple", "fill", "judge", "subjective"]
 const DIFFICULTIES: Difficulty[] = [1, 2, 3, 4, 5]
+
+// 年级按学段分组：小学一年级 → 高三（与教材 grade 字段取值一致）
+const GRADE_GROUPS: { stage: string; grades: string[] }[] = [
+  { stage: "小学", grades: ["一年级", "二年级", "三年级", "四年级", "五年级", "六年级"] },
+  { stage: "初中", grades: ["七年级", "八年级", "九年级"] },
+  { stage: "高中", grades: ["高一", "高二", "高三"] },
+]
+const VOLUMES: Volume[] = ["upper", "lower", "full"]
 
 const LEVEL_DOT: Record<ResourceLevel, string> = {
   city: "bg-chart-4",
@@ -89,10 +114,14 @@ export function QuestionLibraryView() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<Question | null>(null)
+  const [historyQ, setHistoryQ] = useState<Question | null>(null)
   const [batchLevelOpen, setBatchLevelOpen] = useState(false)
   const [aiOpen, setAiOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string; mounts: number } | null>(null)
   const [batchDeleteOpen, setBatchDeleteOpen] = useState(false)
+
+  // 机构上下文：当前“进入”哪个 市/区/校 视角，是否叠加上级下发
+  const [org, setOrg] = useState<OrgContext>({ includeParent: true })
 
   const textbook = textbooks.find((t) => t.id === textbookId)
 
@@ -144,9 +173,22 @@ export function QuestionLibraryView() {
     return q.chapterMounts.some((m) => m.textbookId === textbookId && ids.has(m.chapterId))
   }
 
+  // 当前机构上下文要匹配的 ownerScope 名称集合；null = 全部机构
+  const orgScopeNames = useMemo(() => {
+    const names = resolveOrgScopeNames(org)
+    return names ? new Set(names) : null
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [org.cityName, org.districtName, org.schoolName, org.includeParent])
+
+  function inOrgScope(q: Question) {
+    if (!orgScopeNames) return true
+    return q.ownerScope ? orgScopeNames.has(q.ownerScope) : false
+  }
+
   const filteredRaw = useMemo(() => {
     return questions.filter((q) => {
       if (!inSelectedChapter(q)) return false
+      if (!inOrgScope(q)) return false
       if (levelFilter !== "all" && q.level !== levelFilter) return false
       if (questionType !== "all" && q.type !== questionType) return false
       if (difficultyFilter !== "all" && q.difficulty !== difficultyFilter) return false
@@ -154,7 +196,19 @@ export function QuestionLibraryView() {
       return true
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [questions, chapterSel, textbookId, levelFilter, questionType, difficultyFilter, keyword, descendantIds])
+  }, [questions, chapterSel, textbookId, orgScopeNames, levelFilter, questionType, difficultyFilter, keyword, descendantIds])
+
+  // 当前机构上下文下（不含级别筛选）各级别的题数，用于级别 chip 实时计数
+  const orgScopedQuestions = useMemo(
+    () => questions.filter((q) => inSelectedChapter(q) && inOrgScope(q)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [questions, chapterSel, textbookId, orgScopeNames, descendantIds],
+  )
+  const levelCounts = useMemo(() => {
+    const m: Record<string, number> = { all: orgScopedQuestions.length }
+    for (const lv of RESOURCE_LEVELS) m[lv] = orgScopedQuestions.filter((q) => q.level === lv).length
+    return m
+  }, [orgScopedQuestions])
 
   const rows = useMemo(
     () => filteredRaw.map((q) => buildRow("question", q, kpLabel, mountCountByResource("question", q.id))),
@@ -311,6 +365,13 @@ export function QuestionLibraryView() {
 
       {/* 右侧：筛选 + 题目列表 */}
       <div className="min-w-0 flex-1">
+        {/* 机构归属上下文切换栏 */}
+        <OrgScopeBar
+          org={org}
+          onChange={setOrg}
+          scopedCount={orgScopedQuestions.length}
+        />
+
         {/* 标题行 + 主操作 */}
         <div className="mb-4 flex flex-wrap items-center gap-3">
           <div>
@@ -319,7 +380,7 @@ export function QuestionLibraryView() {
           </div>
           <div className="ml-auto flex items-center gap-2">
             <Button variant="outline" onClick={() => setAiOpen(true)}>
-              <Sparkles className="size-4" /> AI 导入
+              <FileSpreadsheet className="size-4" /> 文件导入
             </Button>
             <Link
               href={`/resources/questions/new?textbook=${textbookId}${chapterSel !== "all" && chapterSel !== "unmounted" ? `&chapter=${chapterSel}` : ""}`}
@@ -333,11 +394,15 @@ export function QuestionLibraryView() {
         {/* 筛选区：级别 + 题型 常驻，更多条件可展开 */}
         <div className="mb-4 rounded-xl border border-border bg-card p-3">
           <FilterLine label="授权范围 / 级别">
-            <FilterChip label="全部" active={levelFilter === "all"} onClick={() => setLevelFilter("all")} />
+            <FilterChip
+              label={`全部 ${levelCounts.all}`}
+              active={levelFilter === "all"}
+              onClick={() => setLevelFilter("all")}
+            />
             {RESOURCE_LEVELS.map((l) => (
               <FilterChip
                 key={l}
-                label={RESOURCE_LEVEL_LABELS[l]}
+                label={`${RESOURCE_LEVEL_LABELS[l]} ${levelCounts[l] ?? 0}`}
                 active={levelFilter === l}
                 onClick={() => setLevelFilter(l)}
                 dotClass={LEVEL_DOT[l]}
@@ -462,6 +527,7 @@ export function QuestionLibraryView() {
                 selected={selected.has(q.id)}
                 onToggleSelect={() => toggleSelect(q.id)}
                 onEdit={() => openEdit(q.id)}
+                onHistory={() => setHistoryQ(q)}
               />
             ))}
           </div>
@@ -495,8 +561,8 @@ export function QuestionLibraryView() {
         }}
       />
 
-      {/* AI 导入 */}
-      <AiImportDialog
+      {/* 文件导入 */}
+      <FileImportDialog
         open={aiOpen}
         onOpenChange={setAiOpen}
         defaultSubject={textbook?.subject ?? "数学"}
@@ -508,6 +574,12 @@ export function QuestionLibraryView() {
       {formOpen && (
         <ResourceFormDialog kind="question" open={formOpen} onOpenChange={setFormOpen} editing={editing} />
       )}
+
+      <QuestionVersionSheet
+        q={historyQ}
+        open={Boolean(historyQ)}
+        onOpenChange={(v) => !v && setHistoryQ(null)}
+      />
 
       <BatchLevelDialog
         kind="question"
@@ -553,6 +625,155 @@ export function QuestionLibraryView() {
   )
 }
 
+// 顶部机构归属上下文切换栏：面包屑式 全部机构 › 市 › 区 › 校
+function OrgScopeBar({
+  org,
+  onChange,
+  scopedCount,
+}: {
+  org: OrgContext
+  onChange: (next: OrgContext) => void
+  scopedCount: number
+}) {
+  const districts = districtsOfCity(org.cityName)
+  const schools = schoolsOfDistrict(org.cityName, org.districtName)
+  const hasContext = Boolean(org.cityName)
+
+  return (
+    <div className="mb-4 flex flex-wrap items-center gap-x-1 gap-y-2 rounded-xl border border-border bg-card px-3 py-2.5">
+      <Building2 className="mr-1 size-4 shrink-0 text-brand" />
+
+      {/* 市级（含“全部机构”入口） */}
+      <OrgSegment
+        label={org.cityName ?? "全部机构"}
+        placeholder={!org.cityName}
+        items={[
+          { name: "", display: "全部机构" },
+          ...ORG_TREE.map((c) => ({ name: c.name, display: c.name })),
+        ]}
+        selected={org.cityName ?? ""}
+        onSelect={(name) =>
+          onChange({
+            includeParent: org.includeParent,
+            cityName: name || undefined,
+          })
+        }
+      />
+
+      {/* 区级 */}
+      {org.cityName && (
+        <>
+          <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
+          <OrgSegment
+            label={org.districtName ?? "全部区县"}
+            placeholder={!org.districtName}
+            items={[
+              { name: "", display: "全部区县" },
+              ...districts.map((d) => ({ name: d.name, display: d.name })),
+            ]}
+            selected={org.districtName ?? ""}
+            onSelect={(name) =>
+              onChange({
+                includeParent: org.includeParent,
+                cityName: org.cityName,
+                districtName: name || undefined,
+              })
+            }
+          />
+        </>
+      )}
+
+      {/* 校级 */}
+      {org.districtName && (
+        <>
+          <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
+          <OrgSegment
+            label={org.schoolName ?? "全部学校"}
+            placeholder={!org.schoolName}
+            items={[
+              { name: "", display: "全部学校" },
+              ...schools.map((s) => ({ name: s.name, display: s.name })),
+            ]}
+            selected={org.schoolName ?? ""}
+            onSelect={(name) =>
+              onChange({
+                includeParent: org.includeParent,
+                cityName: org.cityName,
+                districtName: org.districtName,
+                schoolName: name || undefined,
+              })
+            }
+          />
+        </>
+      )}
+
+      <span className="ml-1 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+        {scopedCount} 道题
+      </span>
+
+      <div className="ml-auto flex items-center gap-3">
+        {hasContext && (
+          <label className="flex cursor-pointer items-center gap-2 text-xs text-foreground">
+            <Switch
+              checked={org.includeParent}
+              onCheckedChange={(v) => onChange({ ...org, includeParent: v })}
+            />
+            含上级下发
+          </label>
+        )}
+        {hasContext && (
+          <button
+            onClick={() => onChange({ includeParent: true })}
+            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground transition hover:bg-muted hover:text-foreground"
+          >
+            <X className="size-3" /> 重置
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function OrgSegment({
+  label,
+  placeholder,
+  items,
+  selected,
+  onSelect,
+}: {
+  label: string
+  placeholder?: boolean
+  items: { name: string; display: string }[]
+  selected: string
+  onSelect: (name: string) => void
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        className={cn(
+          "inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm font-medium transition hover:bg-muted",
+          placeholder ? "text-muted-foreground" : "text-foreground",
+        )}
+      >
+        {label}
+        <ChevronDown className="size-3.5 opacity-60" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="max-h-72 overflow-y-auto">
+        {items.map((it) => (
+          <DropdownMenuItem
+            key={it.name || "__all"}
+            onClick={() => onSelect(it.name)}
+            className="flex items-center justify-between gap-3"
+          >
+            {it.display}
+            {selected === it.name && <Check className="size-3.5 text-brand" />}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
 function TextbookSwitchDialog({
   open,
   onOpenChange,
@@ -566,42 +787,101 @@ function TextbookSwitchDialog({
   currentId: string
   onSelect: (id: string) => void
 }) {
+  const current = textbooks.find((t) => t.id === currentId)
+  const [grade, setGrade] = useState<string>(current?.grade ?? "")
+  const [vol, setVol] = useState<Volume | "all">("all")
+
+  // 切换教材弹窗打开时，默认对齐当前教材的年级
+  useEffect(() => {
+    if (open) setGrade(current?.grade ?? "")
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+
+  const filtered = textbooks.filter(
+    (t) => (!grade || t.grade === grade) && (vol === "all" || t.volume === vol),
+  )
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>切换教材</DialogTitle>
-          <DialogDescription>选择要浏览题库的教材版本。</DialogDescription>
+          <DialogDescription>先选择年级与学期，再选择对应的教材版本。</DialogDescription>
         </DialogHeader>
-        <div className="grid max-h-[60vh] gap-2 overflow-y-auto">
-          {textbooks.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => onSelect(t.id)}
-              className={cn(
-                "flex items-center gap-3 rounded-lg border p-2.5 text-left transition",
-                t.id === currentId
-                  ? "border-brand bg-brand-soft"
-                  : "border-border hover:border-brand/40 hover:bg-muted",
-              )}
-            >
-              <div className="h-14 w-10 shrink-0 overflow-hidden rounded-md ring-1 ring-border">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={t.cover || "/placeholder.svg"} alt="" className="size-full object-cover" />
+
+        {/* 年级选择：小学一年级 → 高三 */}
+        <div className="space-y-2.5">
+          {GRADE_GROUPS.map((g) => (
+            <div key={g.stage} className="flex items-start gap-3">
+              <span className="mt-1.5 w-10 shrink-0 text-xs font-medium text-muted-foreground">
+                {g.stage}
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {g.grades.map((gr) => (
+                  <FilterChip
+                    key={gr}
+                    label={gr}
+                    active={grade === gr}
+                    onClick={() => setGrade((p) => (p === gr ? "" : gr))}
+                  />
+                ))}
               </div>
-              <div className="min-w-0 flex-1">
-                <p className="line-clamp-1 text-sm font-medium text-foreground">{t.name}</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  {t.subject} · {t.version} · {t.grade}
-                </p>
-              </div>
-              {t.id === currentId && (
-                <span className="shrink-0 rounded-full bg-brand px-2 py-0.5 text-[11px] font-medium text-brand-foreground">
-                  当前
-                </span>
-              )}
-            </button>
+            </div>
           ))}
+          {/* 学期 / 册次 */}
+          <div className="flex items-center gap-3 border-t border-border pt-2.5">
+            <span className="w-10 shrink-0 text-xs font-medium text-muted-foreground">学期</span>
+            <div className="flex flex-wrap gap-1.5">
+              <FilterChip label="全部" active={vol === "all"} onClick={() => setVol("all")} />
+              {VOLUMES.map((v) => (
+                <FilterChip
+                  key={v}
+                  label={VOLUME_LABELS[v]}
+                  active={vol === v}
+                  onClick={() => setVol(v)}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* 匹配的教材列表 */}
+        <div className="mt-1 grid max-h-[44vh] gap-2 overflow-y-auto border-t border-border pt-3">
+          {filtered.length === 0 ? (
+            <p className="py-10 text-center text-sm text-muted-foreground">
+              {grade ? `「${grade}${vol === "all" ? "" : VOLUME_LABELS[vol]}」暂无教材` : "请先选择年级"}
+            </p>
+          ) : (
+            filtered.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => onSelect(t.id)}
+                className={cn(
+                  "flex items-center gap-3 rounded-lg border p-2.5 text-left transition",
+                  t.id === currentId
+                    ? "border-brand bg-brand-soft"
+                    : "border-border hover:border-brand/40 hover:bg-muted",
+                )}
+              >
+                <div className="h-14 w-10 shrink-0 overflow-hidden rounded-md ring-1 ring-border">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={t.cover || "/placeholder.svg"} alt="" className="size-full object-cover" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="line-clamp-1 text-sm font-medium text-foreground">{t.name}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {t.subject} · {t.version} · {t.grade}
+                    {t.volume ? VOLUME_LABELS[t.volume] : ""}
+                  </p>
+                </div>
+                {t.id === currentId && (
+                  <span className="shrink-0 rounded-full bg-brand px-2 py-0.5 text-[11px] font-medium text-brand-foreground">
+                    当前
+                  </span>
+                )}
+              </button>
+            ))
+          )}
         </div>
       </DialogContent>
     </Dialog>

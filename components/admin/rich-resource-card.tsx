@@ -12,10 +12,11 @@ import {
   Crown,
   Clapperboard,
   ClipboardList,
+  GitBranch,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Checkbox } from "@/components/ui/checkbox"
-import { LevelChip } from "@/components/admin/level-badge"
+import { LevelBadge } from "@/components/admin/level-badge"
 import { MathText } from "@/components/admin/math-text"
 import { useStore } from "@/lib/store"
 import {
@@ -75,6 +76,7 @@ export function QuestionCard({
   onToggleSelect,
   onEdit,
   onMount,
+  onHistory,
 }: {
   q: Question
   index: number
@@ -82,6 +84,7 @@ export function QuestionCard({
   onToggleSelect?: () => void
   onEdit?: () => void
   onMount?: () => void
+  onHistory?: () => void
 }) {
   const { knowledgePoints } = useStore()
   const [open, setOpen] = useState(false)
@@ -103,8 +106,22 @@ export function QuestionCard({
           {/* 角标行 */}
           <div className="mb-2 flex flex-wrap items-center gap-1.5">
             <Pill className="bg-muted text-muted-foreground">{QUESTION_TYPE_LABELS[q.type]}</Pill>
-            <LevelChip level={q.level} />
+            <LevelBadge level={q.level} ownerScope={q.ownerScope} />
             <Pill className={TIER_CLASS[tier]}>{tier}</Pill>
+            <button
+              type="button"
+              onClick={onHistory}
+              disabled={!onHistory}
+              className={cn(
+                "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium",
+                "bg-brand-soft text-brand-soft-foreground",
+                onHistory && "transition hover:opacity-80",
+              )}
+              title={`当前 v${q.version}，共 ${q.versions.length} 个版本`}
+            >
+              <GitBranch className="size-3" />v{q.version}
+              {q.versions.length > 1 && <span className="opacity-70">/{q.versions.length}</span>}
+            </button>
             {q.videoTitle && (
               <Pill className="bg-brand-soft text-brand-soft-foreground">
                 <PlayCircle className="size-3" />
@@ -149,6 +166,15 @@ export function QuestionCard({
                 展开详情
                 <ChevronDown className={cn("size-3.5 transition", open && "rotate-180")} />
               </button>
+              {onHistory && (
+                <button
+                  onClick={onHistory}
+                  className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-foreground transition hover:bg-muted"
+                >
+                  <GitBranch className="size-3" />
+                  版本
+                </button>
+              )}
               {onEdit && (
                 <button
                   onClick={onEdit}
@@ -263,7 +289,7 @@ export function PremiumCard({
       </span>
       <div className="min-w-0 flex-1">
         <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
-          <LevelChip level={data.level} />
+          <LevelBadge level={data.level} ownerScope={data.ownerScope} />
           <Pill className="bg-warn/15 text-warn-foreground">
             {PREMIUM_CATEGORY_LABELS[data.category]}
           </Pill>
@@ -393,7 +419,10 @@ export function MediaCard({
       </span>
       <div className="min-w-0 flex-1">
         <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
-          <LevelChip level={(data as { level: Question["level"] }).level} />
+          <LevelBadge
+            level={(data as { level: Question["level"] }).level}
+            ownerScope={(data as { ownerScope?: string }).ownerScope}
+          />
           <span className="truncate text-sm font-medium text-foreground">{title}</span>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">{meta}</div>

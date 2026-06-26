@@ -77,6 +77,7 @@ export function ResourceFormDialog({
     addAirClass,
     addPremium,
     updateResource,
+    saveQuestionAsNewVersion,
     knowledgePoints,
     questions,
   } = useStore()
@@ -120,7 +121,22 @@ export function ResourceFormDialog({
   const [category, setCategory] = useState<PremiumCategory>(e?.category ?? "paper")
   const [description, setDescription] = useState(e?.description ?? "")
 
+  // 题目版本：另存为新版本的确认弹窗 + 修订说明
+  const [versionPromptOpen, setVersionPromptOpen] = useState(false)
+  const [changeNote, setChangeNote] = useState("")
+
   const kindLabel = RESOURCE_KIND_LABELS[kind]
+
+  // 编辑题目时，该题是否已有学生作答数据（有则内容改动需另存为新版本）
+  const editingQuestion = isEdit && kind === "question" ? (editing as Question) : null
+  const hasStudentData = (editingQuestion?.studentCount ?? 0) > 0
+  // 内容字段（题干/题型/选项/答案/解析）是否相对当前版本发生变化（难度算元数据，不计入）
+  const contentChanged =
+    !!editingQuestion &&
+    (stem.trim() !== (editingQuestion.stem ?? "") ||
+      qType !== editingQuestion.type ||
+      (answer ?? "") !== (editingQuestion.answer ?? "") ||
+      (analysis ?? "") !== (editingQuestion.analysis ?? ""))
 
   // 知识点随学科联动
   const subjectKps = useMemo(
@@ -163,6 +179,17 @@ export function ResourceFormDialog({
     }
 
     if (isEdit && editing) {
+      // 题目：有学生作答数据 + 改了内容字段 → 弹窗引导另存为新版本（保护历史统计）
+      if (kind === "question" && hasStudentData && contentChanged) {
+        // 先把族级元数据（难度/标注/授权/知识点）就地保存，内容改动交给新版本流程
+        updateResource("question", editing.id, {
+          ...base,
+          difficulty,
+          ...questionExtra,
+        })
+        setVersionPromptOpen(true)
+        return
+      }
       const patch: Record<string, unknown> = { ...base }
       if (kind === "question")
         Object.assign(patch, {
@@ -204,7 +231,30 @@ export function ResourceFormDialog({
     onOpenChange(false)
   }
 
+  // 确认另存为新版本：旧版本归档保留统计，新版本成为当前生效版本
+  function handleConfirmNewVersion() {
+    if (!editingQuestion) return
+    saveQuestionAsNewVersion(
+      editingQuestion.id,
+      {
+        stem: stem.trim(),
+        type: qType,
+        options: editingQuestion.options,
+        answer,
+        analysis,
+      },
+      changeNote.trim(),
+    )
+    const nextV = editingQuestion.version + 1
+    toast.success(`已保存为新版本 v${nextV}`, {
+      description: "原版本已归档并保留历史统计，引用旧版本的作业/试卷不受影响",
+    })
+    setVersionPromptOpen(false)
+    onOpenChange(false)
+  }
+
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[88vh] flex-col gap-0 p-0 sm:max-w-2xl">
         <DialogHeader className="border-b border-border px-6 py-4">
@@ -518,14 +568,57 @@ export function ResourceFormDialog({
           )}
         </div>
 
+        {editingQuestion && hasStudentData && contentChanged && (
+          <div className="mx-6 mb-1 rounded-md border border-medium/30 bg-medium/10 px-3 py-2 text-xs text-foreground/80">
+            该题已有 {editingQuestion.studentCount} 名学生作答记录，修改题目内容将引导你
+            <span className="font-medium text-foreground">另存为新版本</span>
+            （原版本归档保留统计，难度/标注等可直接改）。
+          </div>
+        )}
         <DialogFooter className="border-t border-border px-6 py-4">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             取消
           </Button>
-          <Button onClick={handleSubmit}>{isEdit ? "保存修改" : `创建${kindLabel}`}</Button>
+          <Button onClick={handleSubmit}>
+            {!isEdit
+              ? `创建${kindLabel}`
+              : editingQuestion && hasStudentData && contentChanged
+                ? "另存为新版本…"
+                : "保存修改"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    {/* 另存为新版本：填写修订说明 */}
+    <Dialog open={versionPromptOpen} onOpenChange={setVersionPromptOpen}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>另存为新版本</DialogTitle>
+          <DialogDescription>
+            {editingQuestion
+              ? `当前为 v${editingQuestion.version}，将创建 v${editingQuestion.version + 1}。原版本归档并保留其作答统计，引用旧版本的作业/试卷不受影响。`
+              : ""}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-2 py-2">
+          <Label>修订说明</Label>
+          <Textarea
+            value={changeNote}
+            onChange={(ev) => setChangeNote(ev.target.value)}
+            placeholder="简述这次改了什么，如：优化题干表述、修正答案"
+            className="min-h-20"
+          />
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setVersionPromptOpen(false)}>
+            取消
+          </Button>
+          <Button onClick={handleConfirmNewVersion}>确认另存为新版本</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   )
 }
 

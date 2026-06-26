@@ -4,12 +4,12 @@ import { useRef, useState } from "react"
 import { toast } from "sonner"
 import {
   Check,
+  Download,
+  FileSpreadsheet,
   FileText,
   Loader2,
-  Sparkles,
   Trash2,
   UploadCloud,
-  X,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useStore } from "@/lib/store"
@@ -22,7 +22,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import {
@@ -47,9 +47,9 @@ interface DraftQuestion {
 
 const QUESTION_TYPES = Object.keys(QUESTION_TYPE_LABELS) as QuestionType[]
 
-// 模拟从 Word/PDF 解析出的题目（演示用）
+// 模拟读取 Excel 模板「题目数据」工作表解析出的题目（演示用）
 function mockParse(subject: string): DraftQuestion[] {
-  return [
+  const rows: DraftQuestion[] = [
     {
       id: "d1",
       stem: "计算：$(-7) + (+3) - (-5) = $ ______",
@@ -88,10 +88,11 @@ function mockParse(subject: string): DraftQuestion[] {
       answer: "$x = 5$ 或 $x = -5$",
       analysis: "绝对值为 5 的数有两个，关于原点对称。",
     },
-  ].map((q) => ({ ...q, stem: `${q.stem}` }))
+  ]
+  return rows
 }
 
-export function AiImportDialog({
+export function FileImportDialog({
   open,
   onOpenChange,
   defaultSubject = "数学",
@@ -198,11 +199,11 @@ export function AiImportDialog({
       <DialogContent className="max-h-[90vh] overflow-hidden p-0 sm:max-w-3xl">
         <DialogHeader className="border-b border-border px-6 py-4">
           <DialogTitle className="flex items-center gap-2">
-            <Sparkles className="size-4 text-brand" />
-            AI 导入题目
+            <FileSpreadsheet className="size-4 text-brand" />
+            文件导入题目
           </DialogTitle>
           <DialogDescription>
-            上传 Word / PDF 文档，AI 自动解析出题目，逐题确认后批量入库。
+            按固定 Excel 模板填写后上传，系统读取「题目数据」工作表，逐题确认后批量入库。
           </DialogDescription>
         </DialogHeader>
 
@@ -211,28 +212,51 @@ export function AiImportDialog({
           <Stepper stage={stage} />
 
           {stage === "upload" && (
-            <button
-              type="button"
-              onClick={() => fileRef.current?.click()}
-              className="mt-5 flex w-full flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-border bg-muted/20 py-14 transition hover:border-brand/50 hover:bg-brand-soft/30"
-            >
-              <span className="grid size-12 place-items-center rounded-full bg-brand-soft text-brand">
-                <UploadCloud className="size-6" />
-              </span>
-              <span className="text-sm font-medium text-foreground">
-                点击选择文件，或拖拽到此处
-              </span>
-              <span className="text-xs text-muted-foreground">
-                支持 .doc / .docx / .pdf，单文件不超过 20MB
-              </span>
-              <input
-                ref={fileRef}
-                type="file"
-                accept=".doc,.docx,.pdf"
-                className="hidden"
-                onChange={(e) => handleFile(e.target.files?.[0])}
-              />
-            </button>
+            <div className="mt-5 space-y-4">
+              {/* 下载固定模板 */}
+              <div className="flex items-center gap-3 rounded-lg border border-brand/30 bg-brand-soft/40 px-4 py-3">
+                <span className="grid size-10 shrink-0 place-items-center rounded-md bg-brand/10 text-brand">
+                  <FileSpreadsheet className="size-5" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-foreground">第一步：下载导入模板</p>
+                  <p className="text-xs text-muted-foreground">
+                    模板含「导入说明」与「题目数据」两个工作表，按列填写题目即可。
+                  </p>
+                </div>
+                <a
+                  href="/templates/question-import-template.xlsx"
+                  download="题目导入模板.xlsx"
+                  className={cn(buttonVariants({ variant: "outline", size: "sm" }), "shrink-0 gap-1")}
+                >
+                  <Download className="size-4" /> 下载模板
+                </a>
+              </div>
+
+              {/* 上传已填写的模板 */}
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                className="flex w-full flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-border bg-muted/20 py-12 transition hover:border-brand/50 hover:bg-brand-soft/30"
+              >
+                <span className="grid size-12 place-items-center rounded-full bg-brand-soft text-brand">
+                  <UploadCloud className="size-6" />
+                </span>
+                <span className="text-sm font-medium text-foreground">
+                  第二步：上传已填写的模板，或拖拽到此处
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  仅支持 .xlsx / .xls，单文件不超过 10MB
+                </span>
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept=".xlsx,.xls"
+                  className="hidden"
+                  onChange={(e) => handleFile(e.target.files?.[0])}
+                />
+              </button>
+            </div>
           )}
 
           {stage === "parsing" && (
@@ -240,7 +264,7 @@ export function AiImportDialog({
               <Loader2 className="size-8 animate-spin text-brand" />
               <div className="flex items-center gap-2 text-sm font-medium text-foreground">
                 <FileText className="size-4 text-muted-foreground" />
-                正在解析「{fileName}」
+                正在读取「{fileName}」
               </div>
               <div className="h-2 w-64 overflow-hidden rounded-full bg-muted">
                 <div
@@ -249,7 +273,7 @@ export function AiImportDialog({
                 />
               </div>
               <span className="text-xs text-muted-foreground">
-                AI 正在识别题干、选项、答案与解析…
+                正在读取「题目数据」工作表，校验题型、答案与难度…
               </span>
             </div>
           )}
@@ -341,7 +365,7 @@ export function AiImportDialog({
         {/* 底部操作 */}
         <div className="flex items-center justify-between gap-3 border-t border-border px-6 py-4">
           <span className="text-xs text-muted-foreground">
-            {stage === "review" ? `共 ${drafts.length} 道待导入` : "演示环境使用模拟解析结果"}
+            {stage === "review" ? `共 ${drafts.length} 道待导入` : "演示环境：上传后使用模板示例数据"}
           </span>
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={() => handleClose(false)}>
@@ -361,8 +385,8 @@ export function AiImportDialog({
 
 function Stepper({ stage }: { stage: Stage }) {
   const steps = [
-    { key: "upload", label: "上传文档" },
-    { key: "parsing", label: "AI 解析" },
+    { key: "upload", label: "下载/上传模板" },
+    { key: "parsing", label: "读取表格" },
     { key: "review", label: "确认入库" },
   ]
   const order = { upload: 0, parsing: 1, review: 2 }[stage]
@@ -428,21 +452,21 @@ function DraftCard({
             </span>
           </div>
           <div className="text-sm text-foreground">
-            <MathText text={draft.stem} />
+            <MathText>{draft.stem}</MathText>
           </div>
           {isChoice && draft.options && (
             <div className="mt-1.5 grid gap-1 sm:grid-cols-2">
               {draft.options.map((o) => (
                 <div key={o.key} className="flex items-baseline gap-1.5 text-xs text-muted-foreground">
                   <span className="font-semibold">{o.key}.</span>
-                  <MathText text={o.content} />
+                  <MathText>{o.content}</MathText>
                 </div>
               ))}
             </div>
           )}
           {!open && (
             <p className="mt-1.5 text-xs text-muted-foreground">
-              答案：<MathText text={draft.answer} />
+              答案：<MathText>{draft.answer}</MathText>
             </p>
           )}
         </div>
