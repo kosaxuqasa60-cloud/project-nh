@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { toast } from "sonner"
 import {
+  Building2,
+  Check,
   ChevronDown,
   ChevronRight,
   ChevronsUpDown,
@@ -33,16 +35,28 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
 import { useStore } from "@/lib/store"
 import {
   difficultyTier,
+  districtsOfCity,
+  ORG_TREE,
   QUESTION_TYPE_LABELS,
   RESOURCE_LEVEL_LABELS,
   RESOURCE_LEVELS,
+  resolveOrgScopeNames,
+  schoolsOfDistrict,
   VOLUME_LABELS,
   type ChapterNode,
   type Difficulty,
+  type OrgContext,
   type Question,
   type QuestionType,
   type ResourceLevel,
@@ -106,6 +120,9 @@ export function QuestionLibraryView() {
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string; mounts: number } | null>(null)
   const [batchDeleteOpen, setBatchDeleteOpen] = useState(false)
 
+  // 机构上下文：当前“进入”哪个 市/区/校 视角，是否叠加上级下发
+  const [org, setOrg] = useState<OrgContext>({ includeParent: true })
+
   const textbook = textbooks.find((t) => t.id === textbookId)
 
   const tbChapters = useMemo(
@@ -156,9 +173,22 @@ export function QuestionLibraryView() {
     return q.chapterMounts.some((m) => m.textbookId === textbookId && ids.has(m.chapterId))
   }
 
+  // 当前机构上下文要匹配的 ownerScope 名称集合；null = 全部机构
+  const orgScopeNames = useMemo(() => {
+    const names = resolveOrgScopeNames(org)
+    return names ? new Set(names) : null
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [org.cityName, org.districtName, org.schoolName, org.includeParent])
+
+  function inOrgScope(q: Question) {
+    if (!orgScopeNames) return true
+    return q.ownerScope ? orgScopeNames.has(q.ownerScope) : false
+  }
+
   const filteredRaw = useMemo(() => {
     return questions.filter((q) => {
       if (!inSelectedChapter(q)) return false
+      if (!inOrgScope(q)) return false
       if (levelFilter !== "all" && q.level !== levelFilter) return false
       if (questionType !== "all" && q.type !== questionType) return false
       if (difficultyFilter !== "all" && q.difficulty !== difficultyFilter) return false
@@ -166,7 +196,19 @@ export function QuestionLibraryView() {
       return true
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [questions, chapterSel, textbookId, levelFilter, questionType, difficultyFilter, keyword, descendantIds])
+  }, [questions, chapterSel, textbookId, orgScopeNames, levelFilter, questionType, difficultyFilter, keyword, descendantIds])
+
+  // 当前机构上下文下（不含级别筛选）各级别的题数，用于级别 chip 实时计数
+  const orgScopedQuestions = useMemo(
+    () => questions.filter((q) => inSelectedChapter(q) && inOrgScope(q)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [questions, chapterSel, textbookId, orgScopeNames, descendantIds],
+  )
+  const levelCounts = useMemo(() => {
+    const m: Record<string, number> = { all: orgScopedQuestions.length }
+    for (const lv of RESOURCE_LEVELS) m[lv] = orgScopedQuestions.filter((q) => q.level === lv).length
+    return m
+  }, [orgScopedQuestions])
 
   const rows = useMemo(
     () => filteredRaw.map((q) => buildRow("question", q, kpLabel, mountCountByResource("question", q.id))),
@@ -323,6 +365,13 @@ export function QuestionLibraryView() {
 
       {/* 右侧：筛选 + 题目列表 */}
       <div className="min-w-0 flex-1">
+        {/* 机构归属上下文切换栏 */}
+        <OrgScopeBar
+          org={org}
+          onChange={setOrg}
+          scopedCount={orgScopedQuestions.length}
+        />
+
         {/* 标题行 + 主操作 */}
         <div className="mb-4 flex flex-wrap items-center gap-3">
           <div>
@@ -345,11 +394,15 @@ export function QuestionLibraryView() {
         {/* 筛选区：级别 + 题型 常驻，更多条件可展开 */}
         <div className="mb-4 rounded-xl border border-border bg-card p-3">
           <FilterLine label="授权范围 / 级别">
-            <FilterChip label="全部" active={levelFilter === "all"} onClick={() => setLevelFilter("all")} />
+            <FilterChip
+              label={`全部 ${levelCounts.all}`}
+              active={levelFilter === "all"}
+              onClick={() => setLevelFilter("all")}
+            />
             {RESOURCE_LEVELS.map((l) => (
               <FilterChip
                 key={l}
-                label={RESOURCE_LEVEL_LABELS[l]}
+                label={`${RESOURCE_LEVEL_LABELS[l]} ${levelCounts[l] ?? 0}`}
                 active={levelFilter === l}
                 onClick={() => setLevelFilter(l)}
                 dotClass={LEVEL_DOT[l]}
@@ -569,6 +622,155 @@ export function QuestionLibraryView() {
         </DialogContent>
       </Dialog>
     </div>
+  )
+}
+
+// 顶部机构归属上下文切换栏：面包屑式 全部机构 › 市 › 区 › 校
+function OrgScopeBar({
+  org,
+  onChange,
+  scopedCount,
+}: {
+  org: OrgContext
+  onChange: (next: OrgContext) => void
+  scopedCount: number
+}) {
+  const districts = districtsOfCity(org.cityName)
+  const schools = schoolsOfDistrict(org.cityName, org.districtName)
+  const hasContext = Boolean(org.cityName)
+
+  return (
+    <div className="mb-4 flex flex-wrap items-center gap-x-1 gap-y-2 rounded-xl border border-border bg-card px-3 py-2.5">
+      <Building2 className="mr-1 size-4 shrink-0 text-brand" />
+
+      {/* 市级（含“全部机构”入口） */}
+      <OrgSegment
+        label={org.cityName ?? "全部机构"}
+        placeholder={!org.cityName}
+        items={[
+          { name: "", display: "全部机构" },
+          ...ORG_TREE.map((c) => ({ name: c.name, display: c.name })),
+        ]}
+        selected={org.cityName ?? ""}
+        onSelect={(name) =>
+          onChange({
+            includeParent: org.includeParent,
+            cityName: name || undefined,
+          })
+        }
+      />
+
+      {/* 区级 */}
+      {org.cityName && (
+        <>
+          <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
+          <OrgSegment
+            label={org.districtName ?? "全部区县"}
+            placeholder={!org.districtName}
+            items={[
+              { name: "", display: "全部区县" },
+              ...districts.map((d) => ({ name: d.name, display: d.name })),
+            ]}
+            selected={org.districtName ?? ""}
+            onSelect={(name) =>
+              onChange({
+                includeParent: org.includeParent,
+                cityName: org.cityName,
+                districtName: name || undefined,
+              })
+            }
+          />
+        </>
+      )}
+
+      {/* 校级 */}
+      {org.districtName && (
+        <>
+          <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
+          <OrgSegment
+            label={org.schoolName ?? "全部学校"}
+            placeholder={!org.schoolName}
+            items={[
+              { name: "", display: "全部学校" },
+              ...schools.map((s) => ({ name: s.name, display: s.name })),
+            ]}
+            selected={org.schoolName ?? ""}
+            onSelect={(name) =>
+              onChange({
+                includeParent: org.includeParent,
+                cityName: org.cityName,
+                districtName: org.districtName,
+                schoolName: name || undefined,
+              })
+            }
+          />
+        </>
+      )}
+
+      <span className="ml-1 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+        {scopedCount} 道题
+      </span>
+
+      <div className="ml-auto flex items-center gap-3">
+        {hasContext && (
+          <label className="flex cursor-pointer items-center gap-2 text-xs text-foreground">
+            <Switch
+              checked={org.includeParent}
+              onCheckedChange={(v) => onChange({ ...org, includeParent: v })}
+            />
+            含上级下发
+          </label>
+        )}
+        {hasContext && (
+          <button
+            onClick={() => onChange({ includeParent: true })}
+            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground transition hover:bg-muted hover:text-foreground"
+          >
+            <X className="size-3" /> 重置
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function OrgSegment({
+  label,
+  placeholder,
+  items,
+  selected,
+  onSelect,
+}: {
+  label: string
+  placeholder?: boolean
+  items: { name: string; display: string }[]
+  selected: string
+  onSelect: (name: string) => void
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        className={cn(
+          "inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm font-medium transition hover:bg-muted",
+          placeholder ? "text-muted-foreground" : "text-foreground",
+        )}
+      >
+        {label}
+        <ChevronDown className="size-3.5 opacity-60" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="max-h-72 overflow-y-auto">
+        {items.map((it) => (
+          <DropdownMenuItem
+            key={it.name || "__all"}
+            onClick={() => onSelect(it.name)}
+            className="flex items-center justify-between gap-3"
+          >
+            {it.display}
+            {selected === it.name && <Check className="size-3.5 text-brand" />}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 

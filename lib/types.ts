@@ -114,6 +114,56 @@ export const SCOPE_OPTIONS: Record<ResourceLevel, string[]> = {
   school: ORG_TREE.flatMap((c) => c.districts.flatMap((d) => d.schools.map((s) => s.name))),
 }
 
+// ——— 机构归属索引：题库页“机构上下文切换”用的纯函数 ———
+
+// 当前选中的机构上下文（市/区/校逐级，越深越具体；includeParent 表示是否叠加上级下发）
+export interface OrgContext {
+  cityName?: string
+  districtName?: string
+  schoolName?: string
+  includeParent: boolean
+}
+
+// 取某市下的区列表（下拉级联用）
+export function districtsOfCity(cityName?: string): DistrictOrg[] {
+  if (!cityName) return []
+  return ORG_TREE.find((c) => c.name === cityName)?.districts ?? []
+}
+
+// 取某区下的学校列表（下拉级联用）
+export function schoolsOfDistrict(cityName?: string, districtName?: string): SchoolOrg[] {
+  if (!cityName || !districtName) return []
+  return districtsOfCity(cityName).find((d) => d.name === districtName)?.schools ?? []
+}
+
+// 当前上下文中“最深的那一级”对应的级别（用于卡片/标题判定）
+export function deepestLevel(ctx: OrgContext): ResourceLevel | null {
+  if (ctx.schoolName) return "school"
+  if (ctx.districtName) return "district"
+  if (ctx.cityName) return "city"
+  return null
+}
+
+// 根据机构上下文，解析出应匹配的 ownerScope 名称集合。
+// 返回 null 表示“全部机构”（不按机构过滤）。
+// 仅本级 = 最深选中的那个机构名；含上级 = 该链上从市到最深一节的所有已选机构名。
+export function resolveOrgScopeNames(ctx: OrgContext): string[] | null {
+  const chain = [ctx.cityName, ctx.districtName, ctx.schoolName].filter(Boolean) as string[]
+  if (chain.length === 0) return null
+  if (ctx.includeParent) return chain
+  return [chain[chain.length - 1]]
+}
+
+// 由具体机构名反推它的级别（市/区/校）。用于卡片展示“区级·徐汇区”。
+export function levelOfScopeName(name?: string): ResourceLevel | undefined {
+  if (!name) return undefined
+  if (ORG_TREE.some((c) => c.name === name)) return "city"
+  if (ORG_TREE.some((c) => c.districts.some((d) => d.name === name))) return "district"
+  if (ORG_TREE.some((c) => c.districts.some((d) => d.schools.some((s) => s.name === name))))
+    return "school"
+  return undefined
+}
+
 // 资源级别 + 归属的公共字段：所有资源都带，后台新增时必须指定具体 市/区/校
 export interface LeveledResource {
   level: ResourceLevel
@@ -298,7 +348,7 @@ export interface AirClass extends LeveledResource {
   updatedAt: string
 }
 
-// 精品资源（独立类型）：平台/区域精选的优质资源包，可由组卷或专题构成，同样带 市/区/校 级别
+// 精品资源（独立类型）：平台/区域精选的优质资源包，可由组卷或专题构成，同样�� 市/区/校 级别
 export type PremiumCategory = "paper" | "special" | "courseware"
 export const PREMIUM_CATEGORY_LABELS: Record<PremiumCategory, string> = {
   paper: "精品试卷",

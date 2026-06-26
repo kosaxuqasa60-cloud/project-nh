@@ -16,7 +16,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Checkbox } from "@/components/ui/checkbox"
-import { LevelChip } from "@/components/admin/level-badge"
+import { LevelBadge } from "@/components/admin/level-badge"
 import { MathText } from "@/components/admin/math-text"
 import { useStore } from "@/lib/store"
 import {
@@ -106,7 +106,7 @@ export function QuestionCard({
           {/* 角标行 */}
           <div className="mb-2 flex flex-wrap items-center gap-1.5">
             <Pill className="bg-muted text-muted-foreground">{QUESTION_TYPE_LABELS[q.type]}</Pill>
-            <LevelChip level={q.level} />
+            <LevelBadge level={q.level} ownerScope={q.ownerScope} />
             <Pill className={TIER_CLASS[tier]}>{tier}</Pill>
             <button
               type="button"
@@ -289,7 +289,7 @@ export function PremiumCard({
       </span>
       <div className="min-w-0 flex-1">
         <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
-          <LevelChip level={data.level} />
+          <LevelBadge level={data.level} ownerScope={data.ownerScope} />
           <Pill className="bg-warn/15 text-warn-foreground">
             {PREMIUM_CATEGORY_LABELS[data.category]}
           </Pill>
@@ -419,7 +419,10 @@ export function MediaCard({
       </span>
       <div className="min-w-0 flex-1">
         <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
-          <LevelChip level={(data as { level: Question["level"] }).level} />
+          <LevelBadge
+            level={(data as { level: Question["level"] }).level}
+            ownerScope={(data as { ownerScope?: string }).ownerScope}
+          />
           <span className="truncate text-sm font-medium text-foreground">{title}</span>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">{meta}</div>
