@@ -8,8 +8,11 @@ import type {
   Premium,
   Question,
   QuestionVersion,
+  TagDisable,
+  TagItem,
   Textbook,
 } from "./types"
+import { BASE_SCOPE } from "./types"
 
 export const SUBJECTS = ["数学", "语文", "英语", "物理", "化学", "生物"]
 export const VERSIONS = ["人教版", "北师大版", "苏教版", "华师大版", "外研版"]
@@ -93,6 +96,62 @@ export const knowledgePoints: KnowledgePoint[] = [
   { id: "kp-6", subject: "数学", group: "整式", name: "整式的加减" },
   { id: "kp-7", subject: "数学", group: "一元一次方程", name: "方程的概念" },
   { id: "kp-8", subject: "数学", group: "一元一次方程", name: "解一元一次方程" },
+]
+
+// ===================== 标签字典种子 =====================
+// 平台基准（BASE_SCOPE）：所有区域共享；区域可新增专属或停用基准项。
+let _tagSeq = 0
+const _t = (
+  dimensionKey: TagItem["dimensionKey"],
+  subject: string,
+  name: string,
+  order: number,
+  scope: string,
+  tier?: number,
+): TagItem => ({ id: `tag-${++_tagSeq}`, dimensionKey, subject, name, order, scope, tier })
+
+export const tagItems: TagItem[] = [
+  // 难度（通用，固定 5 档，仅配置名称）
+  _t("difficulty", "通用", "1星·入门", 1, BASE_SCOPE, 1),
+  _t("difficulty", "通用", "2星·基础", 2, BASE_SCOPE, 2),
+  _t("difficulty", "通用", "3星·中等", 3, BASE_SCOPE, 3),
+  _t("difficulty", "通用", "4星·较难", 4, BASE_SCOPE, 4),
+  _t("difficulty", "通用", "5星·挑战", 5, BASE_SCOPE, 5),
+  // 学习水平（数学，单选）
+  _t("learningLevel", "数学", "记忆", 1, BASE_SCOPE),
+  _t("learningLevel", "数学", "理解", 2, BASE_SCOPE),
+  _t("learningLevel", "数学", "应用", 3, BASE_SCOPE),
+  _t("learningLevel", "数学", "分析综合", 4, BASE_SCOPE),
+  // 内容领域（数学，多选）
+  _t("contentDomain", "数学", "数与代数", 1, BASE_SCOPE),
+  _t("contentDomain", "数学", "图形与几何", 2, BASE_SCOPE),
+  _t("contentDomain", "数学", "统计与概率", 3, BASE_SCOPE),
+  _t("contentDomain", "数学", "综合与实践", 4, BASE_SCOPE),
+  // 核心素养（数学，多选）
+  _t("literacy", "数学", "数学运算", 1, BASE_SCOPE),
+  _t("literacy", "数学", "逻辑推理", 2, BASE_SCOPE),
+  _t("literacy", "数学", "数学建模", 3, BASE_SCOPE),
+  _t("literacy", "数学", "直观想象", 4, BASE_SCOPE),
+  _t("literacy", "数学", "数据分析", 5, BASE_SCOPE),
+  // 情境属性（数学，单选）
+  _t("scene", "数学", "纯数学情境", 1, BASE_SCOPE),
+  _t("scene", "数学", "生活情境", 2, BASE_SCOPE),
+  _t("scene", "数学", "跨学科情境", 3, BASE_SCOPE),
+  // 教学用途（数学，多选）
+  _t("usage", "数学", "基础巩固", 1, BASE_SCOPE),
+  _t("usage", "数学", "易错训练", 2, BASE_SCOPE),
+  _t("usage", "数学", "课堂讲解", 3, BASE_SCOPE),
+  _t("usage", "数学", "单元复习", 4, BASE_SCOPE),
+  _t("usage", "数学", "拓展提升", 5, BASE_SCOPE),
+  // —— 区域专属示例：徐汇区为数学“核心素养”新增本区标签 ——
+  _t("literacy", "数学", "区域特色·实验探究", 6, "徐汇区"),
+  // —— 区域专属示例：上海市为数学“情境属性”新增 ——
+  _t("scene", "数学", "海派文化情境", 4, "上海市"),
+]
+
+// 区域停用覆盖示例：徐汇区停用基准“跨学科情境”
+export const tagDisables: TagDisable[] = [
+  { tagId: tagItems.find((t) => t.scope === BASE_SCOPE && t.name === "跨学科情境")!.id, scope: "徐汇区" },
 ]
 
 // 章节目录：每个节点声明它覆盖的知识点

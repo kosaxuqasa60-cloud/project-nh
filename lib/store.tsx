@@ -10,9 +10,11 @@ import {
   premiums as seedPremiums,
   questions as seedQuestions,
   syncLinks as seedSyncLinks,
+  tagDisables as seedTagDisables,
+  tagItems as seedTagItems,
   textbooks as seedTextbooks,
 } from "./mock-data"
-import { PREMIUM_CATEGORY_LABELS, QUESTION_TYPE_LABELS } from "./types"
+import { PREMIUM_CATEGORY_LABELS, QUESTION_TYPE_LABELS, resolveTagOptions } from "./types"
 import type {
   AirClass,
   Assignment,
@@ -26,6 +28,9 @@ import type {
   ResourceKind,
   ResourceLevel,
   SyncResourceType,
+  TagDimensionKey,
+  TagDisable,
+  TagItem,
   Textbook,
 } from "./types"
 
@@ -39,6 +44,17 @@ interface StoreValue {
   premiums: Premium[]
   knowledgePoints: KnowledgePoint[]
   syncLinks: ChapterSyncLink[]
+  // 标签字典：标签项 + 区域停用覆盖
+  tagItems: TagItem[]
+  tagDisables: TagDisable[]
+  addTagItem: (t: Omit<TagItem, "id">) => void
+  updateTagItem: (id: string, patch: Partial<TagItem>) => void
+  removeTagItem: (id: string) => void
+  reorderTagItem: (id: string, dir: "up" | "down") => void
+  // 在某机构下停用/启用某基准标签
+  toggleTagDisable: (tagId: string, scope: string, disabled: boolean) => void
+  // 解析某维度在“某学科 + 某机构”下的最终可用标签（基准 + 区域继承 - 停用）
+  resolveTags: (dimensionKey: TagDimensionKey, subject: string, scopeName?: string) => TagItem[]
   addTextbook: (tb: Omit<Textbook, "id" | "updatedAt">) => Textbook
   updateTextbook: (id: string, patch: Partial<Textbook>) => void
   addChapter: (c: Omit<ChapterNode, "id">) => void
@@ -137,6 +153,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [knowledgePoints, setKnowledgePoints] =
     useState<KnowledgePoint[]>(seedKnowledgePoints)
   const [syncLinks, setSyncLinks] = useState<ChapterSyncLink[]>(seedSyncLinks)
+  const [tagItems, setTagItems] = useState<TagItem[]>(seedTagItems)
+  const [tagDisables, setTagDisables] = useState<TagDisable[]>(seedTagDisables)
 
   // 四类资源共享的可挂载基础结构
   type Mountable = {
@@ -170,6 +188,48 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       premiums,
       knowledgePoints,
       syncLinks,
+      tagItems,
+      tagDisables,
+      addTagItem: (t) =>
+        setTagItems((prev) => [...prev, { ...t, id: nextId("tag") }]),
+      updateTagItem: (id, patch) =>
+        setTagItems((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t))),
+      removeTagItem: (id) => {
+        setTagItems((prev) => prev.filter((t) => t.id !== id))
+        setTagDisables((prev) => prev.filter((d) => d.tagId !== id))
+      },
+      reorderTagItem: (id, dir) =>
+        setTagItems((prev) => {
+          const target = prev.find((t) => t.id === id)
+          if (!target) return prev
+          // 仅在“同维度 + 同学科 + 同作用域”范围内交换相邻 order
+          const peers = prev
+            .filter(
+              (t) =>
+                t.dimensionKey === target.dimensionKey &&
+                t.subject === target.subject &&
+                t.scope === target.scope,
+            )
+            .sort((a, b) => a.order - b.order)
+          const idx = peers.findIndex((t) => t.id === id)
+          const swapIdx = dir === "up" ? idx - 1 : idx + 1
+          if (swapIdx < 0 || swapIdx >= peers.length) return prev
+          const a = peers[idx]
+          const b = peers[swapIdx]
+          return prev.map((t) => {
+            if (t.id === a.id) return { ...t, order: b.order }
+            if (t.id === b.id) return { ...t, order: a.order }
+            return t
+          })
+        }),
+      toggleTagDisable: (tagId, scope, disabled) =>
+        setTagDisables((prev) => {
+          const exists = prev.some((d) => d.tagId === tagId && d.scope === scope)
+          if (disabled) return exists ? prev : [...prev, { tagId, scope }]
+          return prev.filter((d) => !(d.tagId === tagId && d.scope === scope))
+        }),
+      resolveTags: (dimensionKey, subject, scopeName) =>
+        resolveTagOptions(tagItems, tagDisables, dimensionKey, subject, scopeName),
       addTextbook: (tb) => {
         const created: Textbook = { ...tb, id: nextId("tb"), updatedAt: today() }
         setTextbooks((prev) => [created, ...prev])
@@ -187,7 +247,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
       importChapters: (textbookId, rows, replace) => {
         const created: ChapterNode[] = []
-        // 各层级最近一个父节点，用于把 level 转成 parentId
+        // 各层级最近���个父节点，用于把 level 转成 parentId
         const lastByLevel: Record<number, string> = {}
         // 各父节点下的排序计数
         const orderByParent: Record<string, number> = {}
@@ -536,6 +596,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       premiums,
       knowledgePoints,
       syncLinks,
+      tagItems,
+      tagDisables,
     ],
   )
 

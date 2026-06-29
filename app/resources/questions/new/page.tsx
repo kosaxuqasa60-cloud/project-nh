@@ -10,12 +10,8 @@ import { useStore } from "@/lib/store"
 import { MathText } from "@/components/admin/math-text"
 import { OrgScopePicker } from "@/components/admin/org-scope-picker"
 import {
-  COGNITIVE_OPTIONS,
   difficultyTier,
-  LITERACY_OPTIONS,
   QUESTION_TYPE_LABELS,
-  SCENE_OPTIONS,
-  USAGE_OPTIONS,
   type Difficulty,
   type QuestionType,
   type ResourceLevel,
@@ -45,7 +41,7 @@ export default function NewQuestionPage() {
 function NewQuestionInner() {
   const router = useRouter()
   const params = useSearchParams()
-  const { addQuestion, knowledgePoints, textbooks, chapters } = useStore()
+  const { addQuestion, knowledgePoints, textbooks, chapters, resolveTags } = useStore()
 
   // 教材已在外部确定：从 URL 读取，缺省回退首本
   const textbookId = params.get("textbook") || textbooks[0]?.id || ""
@@ -93,6 +89,35 @@ function NewQuestionInner() {
   const isChoice = type === "single" || type === "multiple"
   const subjectKps = knowledgePoints.filter((k) => k.subject === subject)
 
+  // 标注选项改从「标签字典」按 当前学科 + 归属区域(ownerScope) 动态解析
+  // ownerScope 为空时回退平台基准
+  const literacyOpts = useMemo(
+    () => resolveTags("literacy", subject, ownerScope).map((t) => t.name),
+    [resolveTags, subject, ownerScope],
+  )
+  const learningLevelOpts = useMemo(
+    () => resolveTags("learningLevel", subject, ownerScope).map((t) => t.name),
+    [resolveTags, subject, ownerScope],
+  )
+  const usageOpts = useMemo(
+    () => resolveTags("usage", subject, ownerScope).map((t) => t.name),
+    [resolveTags, subject, ownerScope],
+  )
+  const sceneOpts = useMemo(
+    () => resolveTags("scene", subject, ownerScope).map((t) => t.name),
+    [resolveTags, subject, ownerScope],
+  )
+  // 难度档位显示名（字典仅配置名称，档位仍为 1~5）
+  const difficultyNameByTier = useMemo(() => {
+    const m: Record<number, string> = {}
+    resolveTags("difficulty", "通用", ownerScope).forEach((t) => {
+      if (t.tier) m[t.tier] = t.name
+    })
+    return m
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resolveTags, ownerScope])
+  const difficultyLabel = (d: number) => difficultyNameByTier[d] ?? `${d} 星 · ${difficultyTier(d)}`
+
   // 当前教材的可挂载章节（含子章节，按层级缩进展示）
   const mountChapters = useMemo(
     () =>
@@ -130,10 +155,10 @@ function NewQuestionInner() {
     if (!stem.trim()) return toast.error("请先填写题干，AI 将据此生成标注")
     setAiGenerating(true)
     setTimeout(() => {
-      setLiteracy(LITERACY_OPTIONS.slice(0, 2))
-      setCognitive(COGNITIVE_OPTIONS[1] ?? COGNITIVE_OPTIONS[0])
-      setUsage(USAGE_OPTIONS.slice(0, 2))
-      setScene(SCENE_OPTIONS[0])
+      setLiteracy(literacyOpts.slice(0, 2))
+      setCognitive(learningLevelOpts[1] ?? learningLevelOpts[0] ?? "")
+      setUsage(usageOpts.slice(0, 2))
+      setScene(sceneOpts[0] ?? "")
       setTeachTags((p) => Array.from(new Set([...p, "AI 推荐", "易错点"])))
       if (subjectKps.length) setKpIds((p) => (p.length ? p : [subjectKps[0].id]))
       setAiGenerating(false)
@@ -224,12 +249,12 @@ function NewQuestionInner() {
                 <Select
                   value={String(difficulty)}
                   onValueChange={(v) => setDifficulty(Number(v) as Difficulty)}
-                  items={Object.fromEntries(DIFFICULTIES.map((d) => [String(d), `${d} 星 · ${difficultyTier(d)}`]))}
+                  items={Object.fromEntries(DIFFICULTIES.map((d) => [String(d), difficultyLabel(d)]))}
                 >
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {DIFFICULTIES.map((d) => (
-                      <SelectItem key={d} value={String(d)}>{d} 星 · {difficultyTier(d)}</SelectItem>
+                      <SelectItem key={d} value={String(d)}>{difficultyLabel(d)}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -327,24 +352,28 @@ function NewQuestionInner() {
             </div>
             <div className="space-y-4">
               <Labeled label={`核心素养（已选 ${literacy.length}）`}>
-                <Chips options={LITERACY_OPTIONS} value={literacy} onToggle={(v) => toggle(literacy, v, setLiteracy)} />
+                {literacyOpts.length ? (
+                  <Chips options={literacyOpts} value={literacy} onToggle={(v) => toggle(literacy, v, setLiteracy)} />
+                ) : (
+                  <EmptyDict />
+                )}
               </Labeled>
               <div className="grid gap-4 sm:grid-cols-2">
-                <Labeled label="认知层级">
-                  <Select value={cognitive} onValueChange={setCognitive} items={Object.fromEntries(COGNITIVE_OPTIONS.map((o) => [o, o]))}>
-                    <SelectTrigger><SelectValue placeholder="选择认知层级" /></SelectTrigger>
+                <Labeled label="学习水平">
+                  <Select value={cognitive} onValueChange={setCognitive} items={Object.fromEntries(learningLevelOpts.map((o) => [o, o]))}>
+                    <SelectTrigger><SelectValue placeholder="选择学习水平" /></SelectTrigger>
                     <SelectContent>
-                      {COGNITIVE_OPTIONS.map((o) => (
+                      {learningLevelOpts.map((o) => (
                         <SelectItem key={o} value={o}>{o}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </Labeled>
-                <Labeled label="情景属性">
-                  <Select value={scene} onValueChange={setScene} items={Object.fromEntries(SCENE_OPTIONS.map((o) => [o, o]))}>
-                    <SelectTrigger><SelectValue placeholder="选择情景属性" /></SelectTrigger>
+                <Labeled label="情境属性">
+                  <Select value={scene} onValueChange={setScene} items={Object.fromEntries(sceneOpts.map((o) => [o, o]))}>
+                    <SelectTrigger><SelectValue placeholder="选择情境属性" /></SelectTrigger>
                     <SelectContent>
-                      {SCENE_OPTIONS.map((o) => (
+                      {sceneOpts.map((o) => (
                         <SelectItem key={o} value={o}>{o}</SelectItem>
                       ))}
                     </SelectContent>
@@ -352,7 +381,11 @@ function NewQuestionInner() {
                 </Labeled>
               </div>
               <Labeled label={`教学用途（已选 ${usage.length}）`}>
-                <Chips options={USAGE_OPTIONS} value={usage} onToggle={(v) => toggle(usage, v, setUsage)} />
+                {usageOpts.length ? (
+                  <Chips options={usageOpts} value={usage} onToggle={(v) => toggle(usage, v, setUsage)} />
+                ) : (
+                  <EmptyDict />
+                )}
               </Labeled>
               <Labeled label={`知识点（已选 ${kpIds.length}）`}>
                 {subjectKps.length ? (

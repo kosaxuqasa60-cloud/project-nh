@@ -237,6 +237,98 @@ export const USAGE_OPTIONS = [
 ] // 教学用途
 export const SCENE_OPTIONS = ["纯数学情景", "生活情景", "跨学科情景"] // 情景属性
 
+// ===================== 题目标签体系（字典管理） =====================
+// 标注维度固定（不可自定义新增），运营仅在各维度下增删改具体标签。
+// 知识点是独立体系（KnowledgePoint，绑定学科/章节），不在此维度内重复管理。
+export type TagDimensionKey =
+  | "difficulty" // 难度（固定 5 档，仅配置档位显示名）
+  | "learningLevel" // 学习水平
+  | "contentDomain" // 内容领域
+  | "literacy" // 核心素养
+  | "scene" // 情境属性
+  | "usage" // 教学用途
+
+export interface TagDimensionMeta {
+  key: TagDimensionKey
+  label: string
+  select: "single" | "multiple" // 题目标注时单选 / 多选
+  bySubject: boolean // 是否按学科区分（难度通用，其余按学科）
+  fixedTiers: boolean // 是否固定档位（难度=true，仅配置名称、不可增删）
+  desc: string
+}
+
+export const TAG_DIMENSIONS: TagDimensionMeta[] = [
+  { key: "difficulty", label: "难度", select: "single", bySubject: false, fixedTiers: true, desc: "固定 1~5 档，仅配置每档显示名称" },
+  { key: "learningLevel", label: "学习水平", select: "single", bySubject: true, fixedTiers: false, desc: "认知/学习层级，如记忆、理解、应用" },
+  { key: "contentDomain", label: "内容领域", select: "multiple", bySubject: true, fixedTiers: false, desc: "学科内容板块划分" },
+  { key: "literacy", label: "核心素养", select: "multiple", bySubject: true, fixedTiers: false, desc: "学科核心素养标签" },
+  { key: "scene", label: "情境属性", select: "single", bySubject: true, fixedTiers: false, desc: "题目情境类型" },
+  { key: "usage", label: "教学用途", select: "multiple", bySubject: true, fixedTiers: false, desc: "题目的教学使用场景" },
+]
+
+export const TAG_DIMENSION_LABELS: Record<TagDimensionKey, string> = TAG_DIMENSIONS.reduce(
+  (m, d) => ({ ...m, [d.key]: d.label }),
+  {} as Record<TagDimensionKey, string>,
+)
+
+// 标签字典作用域：平台基准（所有区域共享）或具体机构名（市/区/校）
+export const BASE_SCOPE = "base"
+
+// 标签项：一条具体的字典值。scope = BASE_SCOPE（平台基准）或机构名（区域专属）
+export interface TagItem {
+  id: string
+  dimensionKey: TagDimensionKey
+  subject: string // 通用维度（难度）用 "通用"
+  name: string
+  order: number
+  scope: string // BASE_SCOPE | 机构名（如 "上海市" / "徐汇区"）
+  tier?: number // 难度专用：固定档位 1~5
+}
+
+// 区域对“基准标签”的停用覆盖（区域可隐藏不适用的基准项，但不删除基准）
+export interface TagDisable {
+  tagId: string
+  scope: string // 在该机构下停用
+}
+
+// 给定机构名，返回从平台基准到该机构的作用域继承链：[base, 市, 区, 校...]
+export function tagScopeChain(scopeName?: string): string[] {
+  if (!scopeName || scopeName === BASE_SCOPE) return [BASE_SCOPE]
+  for (const city of ORG_TREE) {
+    if (city.name === scopeName) return [BASE_SCOPE, city.name]
+    for (const d of city.districts) {
+      if (d.name === scopeName) return [BASE_SCOPE, city.name, d.name]
+      for (const s of d.schools) {
+        if (s.name === scopeName) return [BASE_SCOPE, city.name, d.name, s.name]
+      }
+    }
+  }
+  return [BASE_SCOPE]
+}
+
+// 解析某维度在“某学科 + 某机构”下最终可用的标签：
+// 基准 + 继承链上各级区域专属，减去链上任意一级停用的项；按 order 排序。
+export function resolveTagOptions(
+  items: TagItem[],
+  disables: TagDisable[],
+  dimensionKey: TagDimensionKey,
+  subject: string,
+  scopeName?: string,
+): TagItem[] {
+  const meta = TAG_DIMENSIONS.find((d) => d.key === dimensionKey)
+  const chain = tagScopeChain(scopeName)
+  const chainSet = new Set(chain)
+  const disabledIds = new Set(
+    disables.filter((d) => chainSet.has(d.scope)).map((d) => d.tagId),
+  )
+  return items
+    .filter((t) => t.dimensionKey === dimensionKey)
+    .filter((t) => (meta?.bySubject ? t.subject === subject : true))
+    .filter((t) => chainSet.has(t.scope))
+    .filter((t) => !disabledIds.has(t.id))
+    .sort((a, b) => a.order - b.order)
+}
+
 // 题目版本状态：草稿 / 已发布（当前生效）/ 已归档（被新版本取代，仅保留统计可追溯）
 export type QuestionVersionStatus = "draft" | "published" | "archived"
 export const QUESTION_VERSION_STATUS_LABELS: Record<QuestionVersionStatus, string> = {
