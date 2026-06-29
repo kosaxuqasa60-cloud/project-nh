@@ -116,7 +116,7 @@ function NewQuestionInner() {
     return m
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resolveTags, ownerScope])
-  const difficultyLabel = (d: number) => difficultyNameByTier[d] ?? `${d} 星 · ${difficultyTier(d)}`
+  const difficultyLabel = (d: Difficulty) => difficultyNameByTier[d] ?? `${d} 星 · ${difficultyTier(d)}`
 
   // 当前教材的可挂载章节（含子章节，按层级缩进展示）
   const mountChapters = useMemo(
@@ -511,6 +511,14 @@ function Labeled({ label, children }: { label: string; children: React.ReactNode
       <label className="text-xs font-medium text-foreground">{label}</label>
       {children}
     </div>
+  )
+}
+
+function EmptyDict() {
+  return (
+    <p className="rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
+      该学科/区域下暂无可用标签，请前往「资源中心 › 标签字典」配置。
+    </p>
   )
 }
 
