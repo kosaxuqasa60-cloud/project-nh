@@ -96,8 +96,8 @@ function NewQuestionInner() {
     [resolveTags, subject, ownerScope],
   )
   const learningLevelOpts = useMemo(
-    () => resolveTags("learningLevel", subject, ownerScope).map((t) => t.name),
-    [resolveTags, subject, ownerScope],
+    () => resolveTags("learningLevel", "通用", ownerScope).map((t) => t.name),
+    [resolveTags, ownerScope],
   )
   const usageOpts = useMemo(
     () => resolveTags("usage", subject, ownerScope).map((t) => t.name),

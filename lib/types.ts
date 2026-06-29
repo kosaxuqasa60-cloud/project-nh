@@ -238,32 +238,34 @@ export const USAGE_OPTIONS = [
 export const SCENE_OPTIONS = ["纯数学情景", "生活情景", "跨学科情景"] // 情景属性
 
 // ===================== 题目标签体系（字典管理） =====================
-// 标注维度固定（不可自定义新增），运营仅在各维度下增删改具体标签。
+// 标注维度固定（不可自定义新增），运营在各维度下自由增删改具体标签。
 // 知识点是独立体系（KnowledgePoint，绑定学科/章节），不在此维度内重复管理。
 export type TagDimensionKey =
-  | "difficulty" // 难度（固定 5 档，仅配置档位显示名）
-  | "learningLevel" // 学习水平
+  | "difficulty" // 难度（通用标准，可自定义档位）
+  | "learningLevel" // 学习水平（通用标准）
   | "contentDomain" // 内容领域
   | "literacy" // 核心素养
   | "scene" // 情境属性
   | "usage" // 教学用途
 
+// 通用学科：难度、学习水平等通用标准归入该学科，全学科共享
+export const UNIVERSAL_SUBJECT = "通用"
+
 export interface TagDimensionMeta {
   key: TagDimensionKey
   label: string
   select: "single" | "multiple" // 题目标注时单选 / 多选
-  bySubject: boolean // 是否按学科区分（难度通用，其余按学科）
-  fixedTiers: boolean // 是否固定档位（难度=true，仅配置名称、不可增删）
+  bySubject: boolean // 是否按学科区分（false=通用标准，归入“通用”学科）
   desc: string
 }
 
 export const TAG_DIMENSIONS: TagDimensionMeta[] = [
-  { key: "difficulty", label: "难度", select: "single", bySubject: false, fixedTiers: true, desc: "固定 1~5 档，仅配置每档显示名称" },
-  { key: "learningLevel", label: "学习水平", select: "single", bySubject: true, fixedTiers: false, desc: "认知/学习层级，如记忆、理解、应用" },
-  { key: "contentDomain", label: "内容领域", select: "multiple", bySubject: true, fixedTiers: false, desc: "学科内容板块划分" },
-  { key: "literacy", label: "核心素养", select: "multiple", bySubject: true, fixedTiers: false, desc: "学科核心素养标签" },
-  { key: "scene", label: "情境属性", select: "single", bySubject: true, fixedTiers: false, desc: "题目情境类型" },
-  { key: "usage", label: "教学用途", select: "multiple", bySubject: true, fixedTiers: false, desc: "题目的教学使用场景" },
+  { key: "difficulty", label: "难度", select: "single", bySubject: false, desc: "难度档位，可自定义新增、改名、排序" },
+  { key: "learningLevel", label: "学习水平", select: "single", bySubject: false, desc: "认知/学习层级，如记忆、理解、应用" },
+  { key: "contentDomain", label: "内容领域", select: "multiple", bySubject: true, desc: "学科内容板块划分" },
+  { key: "literacy", label: "核心素养", select: "multiple", bySubject: true, desc: "学科核心素养标签" },
+  { key: "scene", label: "情境属性", select: "single", bySubject: true, desc: "题目情境类型" },
+  { key: "usage", label: "教学用途", select: "multiple", bySubject: true, desc: "题目的教学使用场景" },
 ]
 
 export const TAG_DIMENSION_LABELS: Record<TagDimensionKey, string> = TAG_DIMENSIONS.reduce(

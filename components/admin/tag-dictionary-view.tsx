@@ -11,6 +11,7 @@ import {
   ORG_TREE,
   TAG_DIMENSIONS,
   tagScopeChain,
+  UNIVERSAL_SUBJECT,
   type TagDimensionKey,
   type TagItem,
 } from "@/lib/types"
@@ -60,9 +61,23 @@ export function TagDictionaryView() {
     useStore()
 
   const scopeOptions = useMemo(buildScopeOptions, [])
-  const [subject, setSubject] = useState("数学")
+  // 学科选项：通用 + 各具体学科。通用学科承载难度、学习水平等通用标准
+  const subjectOptions = useMemo(() => [UNIVERSAL_SUBJECT, ...SUBJECTS], [])
+  const [subject, setSubject] = useState<string>(UNIVERSAL_SUBJECT)
   const [scope, setScope] = useState<string>(BASE_SCOPE)
-  const [activeDim, setActiveDim] = useState<TagDimensionKey>("literacy")
+  const [activeDim, setActiveDim] = useState<TagDimensionKey>("difficulty")
+
+  const isUniversal = subject === UNIVERSAL_SUBJECT
+  // 当前学科下可见的维度：通用学科显示通用维度，具体学科显示按学科维度
+  const visibleDims = useMemo(
+    () => TAG_DIMENSIONS.filter((d) => (isUniversal ? !d.bySubject : d.bySubject)),
+    [isUniversal],
+  )
+
+  // 切换学科后，若当前维度不在可见列表内，自动切到该学科第一个维度
+  if (!visibleDims.some((d) => d.key === activeDim) && visibleDims.length > 0) {
+    setActiveDim(visibleDims[0].key)
+  }
 
   // 新增 / 编辑标签弹窗
   const [editOpen, setEditOpen] = useState(false)
@@ -72,18 +87,18 @@ export function TagDictionaryView() {
   const isBase = scope === BASE_SCOPE
   const scopeMeta = scopeOptions.find((s) => s.value === scope)!
   const meta = TAG_DIMENSIONS.find((d) => d.key === activeDim)!
-  const subjForActive = meta.bySubject ? subject : "通用"
+  const subjForActive = meta.bySubject ? subject : UNIVERSAL_SUBJECT
 
   // 左侧各维度在当前作用域下的可用标签数（用于角标）
   const dimCounts = useMemo(() => {
     const m: Record<string, number> = {}
-    for (const d of TAG_DIMENSIONS) {
-      const subj = d.bySubject ? subject : "通用"
+    for (const d of visibleDims) {
+      const subj = d.bySubject ? subject : UNIVERSAL_SUBJECT
       m[d.key] = resolveTags(d.key, subj, scope).length
     }
     return m
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tagItems, tagDisables, subject, scope])
+  }, [tagItems, tagDisables, subject, scope, visibleDims])
 
   // 当前维度：本级自有标签
   const ownItems = useMemo(
@@ -108,10 +123,6 @@ export function TagDictionaryView() {
   }
 
   function openAdd() {
-    if (meta.fixedTiers) {
-      toast.info("难度为固定档位，不支持新增，只能修改各档显示名称")
-      return
-    }
     setEditing(null)
     setNameInput("")
     setEditOpen(true)
@@ -132,12 +143,20 @@ export function TagDictionaryView() {
       toast.success("标签已更新")
     } else {
       const maxOrder = ownItems.reduce((mx, t) => Math.max(mx, t.order), 0)
+      // 难度维度：新增档位时自动续接 tier 序号
+      const isDifficulty = activeDim === "difficulty"
+      const maxTier = isDifficulty
+        ? tagItems
+            .filter((t) => t.dimensionKey === "difficulty")
+            .reduce((mx, t) => Math.max(mx, t.tier ?? 0), 0)
+        : undefined
       addTagItem({
         dimensionKey: activeDim,
         subject: subjForActive,
         name,
         order: maxOrder + 1,
         scope,
+        ...(isDifficulty ? { tier: (maxTier ?? 0) + 1 } : {}),
       })
       toast.success("标签已新增")
     }
@@ -168,9 +187,9 @@ export function TagDictionaryView() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {SUBJECTS.map((s) => (
+              {subjectOptions.map((s) => (
                 <SelectItem key={s} value={s}>
-                  {s}
+                  {s === UNIVERSAL_SUBJECT ? "通用（全学科）" : s}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -205,7 +224,7 @@ export function TagDictionaryView() {
         {/* 左：维度列表 */}
         <div className="w-full shrink-0 md:w-52">
           <div className="flex flex-col gap-1 rounded-xl border border-border bg-card p-2">
-            {TAG_DIMENSIONS.map((d) => {
+            {visibleDims.map((d) => {
               const active = d.key === activeDim
               return (
                 <button
@@ -246,7 +265,7 @@ export function TagDictionaryView() {
                 {meta.bySubject ? `按学科 · ${subject}` : "全学科通用"}
               </span>
               <span className="text-xs text-muted-foreground">{meta.desc}</span>
-              <Button size="sm" className="ml-auto gap-1" onClick={openAdd} disabled={meta.fixedTiers}>
+              <Button size="sm" className="ml-auto gap-1" onClick={openAdd}>
                 <Plus className="size-4" /> 新增标签
               </Button>
             </div>
@@ -297,7 +316,7 @@ export function TagDictionaryView() {
                 </p>
                 {ownItems.length === 0 ? (
                   <p className="py-6 text-center text-sm text-muted-foreground">
-                    {meta.fixedTiers ? "难度档位由基准维护" : isBase ? "暂无标签，点击右上角新增" : "本级暂无专属标签"}
+                    {isBase ? "暂无标签，点击右上角新增" : "本级暂无专属标签"}
                   </p>
                 ) : (
                   <div className="flex flex-col gap-1.5">
@@ -339,18 +358,16 @@ export function TagDictionaryView() {
                           >
                             <Pencil className="size-3.5" />
                           </button>
-                          {!meta.fixedTiers && (
-                            <button
-                              onClick={() => {
-                                removeTagItem(t.id)
-                                toast.success("标签已删除")
-                              }}
-                              className="grid size-7 place-items-center rounded-md text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
-                              aria-label="删除"
-                            >
-                              <Trash2 className="size-3.5" />
-                            </button>
-                          )}
+                          <button
+                            onClick={() => {
+                              removeTagItem(t.id)
+                              toast.success("标签已删除")
+                            }}
+                            className="grid size-7 place-items-center rounded-md text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
+                            aria-label="删除"
+                          >
+                            <Trash2 className="size-3.5" />
+                          </button>
                         </div>
                       </div>
                     ))}
@@ -373,7 +390,7 @@ export function TagDictionaryView() {
             <Input
               value={nameInput}
               onChange={(e) => setNameInput(e.target.value)}
-              placeholder={`请输入${meta.label}标签名称`}
+              placeholder={`请���入${meta.label}标签名称`}
               onKeyDown={(e) => e.key === "Enter" && submitEdit()}
               autoFocus
             />

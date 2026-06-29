@@ -111,17 +111,17 @@ const _t = (
 ): TagItem => ({ id: `tag-${++_tagSeq}`, dimensionKey, subject, name, order, scope, tier })
 
 export const tagItems: TagItem[] = [
-  // 难度（通用，固定 5 档，仅配置名称）
+  // 难度（通用标准，可自定义档位）
   _t("difficulty", "通用", "1星·入门", 1, BASE_SCOPE, 1),
   _t("difficulty", "通用", "2星·基础", 2, BASE_SCOPE, 2),
   _t("difficulty", "通用", "3星·中等", 3, BASE_SCOPE, 3),
   _t("difficulty", "通用", "4星·较难", 4, BASE_SCOPE, 4),
   _t("difficulty", "通用", "5星·挑战", 5, BASE_SCOPE, 5),
-  // 学习水平（数学，单选）
-  _t("learningLevel", "数学", "记忆", 1, BASE_SCOPE),
-  _t("learningLevel", "数学", "理解", 2, BASE_SCOPE),
-  _t("learningLevel", "数学", "应用", 3, BASE_SCOPE),
-  _t("learningLevel", "数学", "分析综合", 4, BASE_SCOPE),
+  // 学习水平（通用标准，单选）
+  _t("learningLevel", "通用", "记忆", 1, BASE_SCOPE),
+  _t("learningLevel", "通用", "理解", 2, BASE_SCOPE),
+  _t("learningLevel", "通用", "应用", 3, BASE_SCOPE),
+  _t("learningLevel", "通用", "分析综合", 4, BASE_SCOPE),
   // 内容领域（数学，多选）
   _t("contentDomain", "数学", "数与代数", 1, BASE_SCOPE),
   _t("contentDomain", "数学", "图形与几何", 2, BASE_SCOPE),
