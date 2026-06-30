@@ -189,10 +189,13 @@ function NewQuestionInner() {
       videoTitle: videoTitle.trim() || undefined,
       videoDuration: videoDuration.trim() || undefined,
       knowledgePointIds: kpIds,
-      literacy,
-      cognitive: cognitive || undefined,
-      usage,
-      scene: scene || undefined,
+      // 动态维度标注值（含自定义维度）
+      dimTags,
+      // 兼容旧字段：内置维度映射回卡片详情使用的字段
+      literacy: dimTags["literacy"] ?? [],
+      cognitive: dimTags["learningLevel"]?.[0] || undefined,
+      usage: dimTags["usage"] ?? [],
+      scene: dimTags["scene"]?.[0] || undefined,
       teachTags,
       level,
       ownerScope,
@@ -357,42 +360,41 @@ function NewQuestionInner() {
               </button>
             </div>
             <div className="space-y-4">
-              <Labeled label={`核心素养（已选 ${literacy.length}）`}>
-                {literacyOpts.length ? (
-                  <Chips options={literacyOpts} value={literacy} onToggle={(v) => toggle(literacy, v, setLiteracy)} />
-                ) : (
-                  <EmptyDict />
-                )}
-              </Labeled>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Labeled label="学习水平">
-                  <Select value={cognitive} onValueChange={setCognitive} items={Object.fromEntries(learningLevelOpts.map((o) => [o, o]))}>
-                    <SelectTrigger><SelectValue placeholder="选择学习水平" /></SelectTrigger>
-                    <SelectContent>
-                      {learningLevelOpts.map((o) => (
-                        <SelectItem key={o} value={o}>{o}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Labeled>
-                <Labeled label="情境属性">
-                  <Select value={scene} onValueChange={setScene} items={Object.fromEntries(sceneOpts.map((o) => [o, o]))}>
-                    <SelectTrigger><SelectValue placeholder="选择情境属性" /></SelectTrigger>
-                    <SelectContent>
-                      {sceneOpts.map((o) => (
-                        <SelectItem key={o} value={o}>{o}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Labeled>
-              </div>
-              <Labeled label={`教学用途（已选 ${usage.length}）`}>
-                {usageOpts.length ? (
-                  <Chips options={usageOpts} value={usage} onToggle={(v) => toggle(usage, v, setUsage)} />
-                ) : (
-                  <EmptyDict />
-                )}
-              </Labeled>
+              {/* 动态标注维度（含管理端自定义维度） */}
+              {annotationDims.map((d) => {
+                const selected = dimTags[d.key] ?? []
+                if (d.select === "single") {
+                  return (
+                    <Labeled key={d.key} label={d.label}>
+                      {d.options.length ? (
+                        <Select
+                          value={selected[0] ?? ""}
+                          onValueChange={(v) => setDimValue(d.key, v ? [v] : [])}
+                          items={Object.fromEntries(d.options.map((o) => [o, o]))}
+                        >
+                          <SelectTrigger><SelectValue placeholder={`选择${d.label}`} /></SelectTrigger>
+                          <SelectContent>
+                            {d.options.map((o) => (
+                              <SelectItem key={o} value={o}>{o}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <EmptyDict />
+                      )}
+                    </Labeled>
+                  )
+                }
+                return (
+                  <Labeled key={d.key} label={`${d.label}（已选 ${selected.length}）`}>
+                    {d.options.length ? (
+                      <Chips options={d.options} value={selected} onToggle={(v) => toggleDimValue(d.key, v)} />
+                    ) : (
+                      <EmptyDict />
+                    )}
+                  </Labeled>
+                )
+              })}
               <Labeled label={`知识点（已选 ${kpIds.length}）`}>
                 {subjectKps.length ? (
                   <Chips

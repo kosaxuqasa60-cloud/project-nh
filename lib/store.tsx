@@ -47,7 +47,7 @@ interface StoreValue {
   syncLinks: ChapterSyncLink[]
   // 标签字典：维度 + 标签项 + 区域停用覆盖
   tagDimensions: TagDimensionMeta[]
-  addTagDimension: (d: { label: string; bySubject: boolean }) => void
+  addTagDimension: (d: { label: string; bySubject: boolean }) => string
   updateTagDimension: (key: TagDimensionKey, patch: Partial<TagDimensionMeta>) => void
   removeTagDimension: (key: TagDimensionKey) => void
   tagItems: TagItem[]
@@ -201,6 +201,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           ...prev,
           { key, label, select: "multiple", bySubject, builtin: false, desc: "自定义维度" },
         ])
+        return key
       },
       updateTagDimension: (key, patch) =>
         setTagDimensions((prev) => prev.map((d) => (d.key === key ? { ...d, ...patch } : d))),

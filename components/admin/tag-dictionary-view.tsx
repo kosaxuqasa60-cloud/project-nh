@@ -205,13 +205,15 @@ export function TagDictionaryView() {
       updateTagDimension(dimEditingKey, { label })
       toast.success("维度已更新")
     } else {
-      addTagDimension({ label, bySubject: dimBySubject })
+      const newKey = addTagDimension({ label, bySubject: dimBySubject })
       toast.success("维度已新增", {
         description: dimBySubject ? "归属：按学科（在具体学科下配置）" : "归属：通用（全学科共享）",
       })
       // 若新维度归属与当前学科不匹配，切到匹配的学科视图
       if (dimBySubject && isUniversal) setSubject(SUBJECTS[0])
       if (!dimBySubject && !isUniversal) setSubject(UNIVERSAL_SUBJECT)
+      // 自动选中新维度，便于立即配置标签
+      setActiveDim(newKey)
     }
     setDimDialogOpen(false)
   }
