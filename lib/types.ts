@@ -462,6 +462,67 @@ export interface Premium extends LeveledResource {
   chapterMounts: { textbookId: string; chapterId: string }[]
   usedCount?: number
   updatedAt: string
+  // 专题资源（category="special"）的结构化题目包：有序板块
+  sections?: TopicSection[]
+}
+
+// ===================== 专题资源：结构化题目包 =====================
+// 专题 = 多个有序板块（Section），每个板块下多个条目（Item）。
+// 条目要么是“纯文本块”（补充知识/自我归纳等讲解），要么是“题目”（题干+答案+解析+视频讲解）。
+// 题目在专题内直接录入，视频讲解挂在题目条目上。
+export type TopicItemType = "text" | "question"
+
+// 视频讲解
+export interface TopicVideo {
+  title?: string // 如 “视频1”
+  url?: string // 视频地址
+  duration?: string // 时长，如 “3:25”
+}
+
+// 纯文本块：补充知识、自我归纳等非题目内容
+export interface TopicTextItem {
+  id: string
+  type: "text"
+  title?: string // 文本块小标题（可选）
+  content: string // 讲解正文
+}
+
+// 题目条目：专题内直接录入的题目，含可选视频讲解
+export interface TopicQuestionItem {
+  id: string
+  type: "question"
+  label?: string // 题目编号/标识，如 “例1” “1”
+  stem: string // 题干
+  answer?: string // 答案
+  analysis?: string // 解析
+  video?: TopicVideo // 视频讲解
+}
+
+export type TopicItem = TopicTextItem | TopicQuestionItem
+
+// 板块：如 补充知识 / 自学例题 / 自我检测 / 巩固练习 / 阶段练习
+export interface TopicSection {
+  id: string
+  title: string
+  intro?: string // 板块说明（可选）
+  items: TopicItem[]
+}
+
+// —— 专题统计辅助 ——
+export function topicQuestionCount(p: Pick<Premium, "sections">): number {
+  return (p.sections ?? []).reduce(
+    (n, s) => n + s.items.filter((it) => it.type === "question").length,
+    0,
+  )
+}
+export function topicVideoCount(p: Pick<Premium, "sections">): number {
+  return (p.sections ?? []).reduce(
+    (n, s) =>
+      n +
+      s.items.filter((it) => it.type === "question" && !!(it as TopicQuestionItem).video?.url)
+        .length,
+    0,
+  )
 }
 
 // 可同步的资源类型（参与教材章节挂载 / 同步关系的类型）
