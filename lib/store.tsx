@@ -92,7 +92,7 @@ interface StoreValue {
   createTopic: (
     p: Pick<
       Premium,
-      "title" | "subject" | "description" | "level" | "ownerScope" | "sections" | "coverImage" | "lockVideoUntilAnswered"
+      "title" | "subject" | "description" | "level" | "ownerScope" | "sections" | "coverImage"
     >,
   ) => string
   updateTopic: (id: string, patch: Partial<Premium>) => void
@@ -454,7 +454,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             ownerScope: p.ownerScope,
             sections: p.sections ?? [],
             coverImage: p.coverImage,
-            lockVideoUntilAnswered: p.lockVideoUntilAnswered,
             usedCount: 0,
             updatedAt: today(),
           } as Premium,

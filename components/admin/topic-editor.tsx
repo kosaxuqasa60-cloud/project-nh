@@ -26,7 +26,6 @@ import { SUBJECTS } from "@/lib/mock-data"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { Switch } from "@/components/ui/switch"
 import {
   Select,
   SelectContent,
@@ -90,7 +89,6 @@ export function TopicEditor({ id }: { id: string }) {
   const [schoolId, setSchoolId] = useState(initIds.schoolId)
   const [ownerScope, setOwnerScope] = useState(existing?.ownerScope ?? "")
   const [coverImage, setCoverImage] = useState(existing?.coverImage ?? "")
-  const [lockVideo, setLockVideo] = useState(existing?.lockVideoUntilAnswered ?? false)
   // —— 板块 ——
   const [sections, setSections] = useState<TopicSection[]>(existing?.sections ?? [])
 
@@ -185,7 +183,6 @@ export function TopicEditor({ id }: { id: string }) {
       ownerScope: ownerScope || undefined,
       sections,
       coverImage: coverImage || undefined,
-      lockVideoUntilAnswered: lockVideo,
     }
     if (isNew) {
       const newId = createTopic(payload)
@@ -272,22 +269,9 @@ export function TopicEditor({ id }: { id: string }) {
             }}
           />
         </Field>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="专题封面图">
-            <CoverUploader value={coverImage} onChange={setCoverImage} />
-          </Field>
-          <Field label="视频解锁规则">
-            <label className="flex h-full cursor-pointer items-center gap-3 rounded-lg border border-border bg-background px-3 py-2.5">
-              <Switch checked={lockVideo} onCheckedChange={setLockVideo} />
-              <span className="text-sm text-foreground">
-                作答后解锁视频
-                <span className="block text-[11px] text-muted-foreground">
-                  开启后学生需先提交答案才能观看讲解视频
-                </span>
-              </span>
-            </label>
-          </Field>
-        </div>
+        <Field label="专题封面图">
+          <CoverUploader value={coverImage} onChange={setCoverImage} />
+        </Field>
       </section>
 
       {/* 板块 */}

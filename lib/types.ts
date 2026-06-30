@@ -465,7 +465,6 @@ export interface Premium extends LeveledResource {
   // 专题资源（category="special"）的结构化题目包：有序板块
   sections?: TopicSection[]
   coverImage?: string // 专题封面图
-  lockVideoUntilAnswered?: boolean // 学生需先作答才能解锁视频讲解
 }
 
 // ===================== 专题资源：结构化题目包 =====================

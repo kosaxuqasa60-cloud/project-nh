@@ -622,7 +622,6 @@ export const premiums: Premium[] = [
     chapterMounts: [],
     usedCount: 96,
     updatedAt: "2026-06-05",
-    lockVideoUntilAnswered: true,
     sections: [
       {
         id: "sec-1",

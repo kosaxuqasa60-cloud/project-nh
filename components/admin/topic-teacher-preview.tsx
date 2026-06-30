@@ -110,12 +110,6 @@ export function TopicTeacherPreview({ topicId }: { topicId: string }) {
             <span>{topic.subject}</span>
             <span>·</span>
             <span>{topic.ownerScope ?? "平台"}</span>
-            {topic.lockVideoUntilAnswered && (
-              <>
-                <span>·</span>
-                <span>学生作答后解锁视频</span>
-              </>
-            )}
           </div>
           {topic.description && (
             <p className="mt-3 text-pretty text-sm leading-relaxed text-muted-foreground">
