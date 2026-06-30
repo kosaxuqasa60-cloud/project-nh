@@ -238,15 +238,10 @@ export const USAGE_OPTIONS = [
 export const SCENE_OPTIONS = ["纯数学情景", "生活情景", "跨学科情景"] // 情景属性
 
 // ===================== 题目标签体系（字典管理） =====================
-// 标注维度固定（不可自定义新增），运营在各维度下自由增删改具体标签。
+// 标注维度可后台自定义增删（内置维度 + 自定义维度），各维度下再配置具体标签。
 // 知识点是独立体系（KnowledgePoint，绑定学科/章节），不在此维度内重复管理。
-export type TagDimensionKey =
-  | "difficulty" // 难度（通用标准，可自定义档位）
-  | "learningLevel" // 学习水平（通用标准）
-  | "contentDomain" // 内容领域
-  | "literacy" // 核心素养
-  | "scene" // 情境属性
-  | "usage" // 教学用途
+// 维度 key：内置为固定字符串（difficulty 等），自定义为生成的 "dim-xxx"。
+export type TagDimensionKey = string
 
 // 通用学科：难度、学习水平等通用标准归入该学科，全学科共享
 export const UNIVERSAL_SUBJECT = "通用"
@@ -256,24 +251,24 @@ export interface TagDimensionMeta {
   label: string
   select: "single" | "multiple" // 题目标注时单选 / 多选
   bySubject: boolean // 是否按学科区分（false=通用标准，归入“通用”学科）
+  builtin: boolean // 是否内置维度（内置可改名/删除，自定义同样可删）
   desc: string
 }
 
-export const TAG_DIMENSIONS: TagDimensionMeta[] = [
-  { key: "difficulty", label: "难度", select: "single", bySubject: false, desc: "难度档位，可自定义新增、改名、排序" },
-  { key: "learningLevel", label: "学习水平", select: "single", bySubject: false, desc: "认知/学习层级，如记忆、理解、应用" },
-  { key: "contentDomain", label: "内容领域", select: "multiple", bySubject: true, desc: "学科内容板块划分" },
-  { key: "literacy", label: "核心素养", select: "multiple", bySubject: true, desc: "学科核心素养标签" },
-  { key: "scene", label: "情境属性", select: "single", bySubject: true, desc: "题目情境类型" },
-  { key: "usage", label: "教学用途", select: "multiple", bySubject: true, desc: "题目的教学使用场景" },
+// 难度维度的固定 key：题目难度走独立的 difficulty 数值字段，UI 特殊处理
+export const DIFFICULTY_DIM_KEY = "difficulty"
+
+// 内置维度种子。store 以此初始化为可变状态，后续支持增删改。
+export const DEFAULT_TAG_DIMENSIONS: TagDimensionMeta[] = [
+  { key: "difficulty", label: "难度", select: "single", bySubject: false, builtin: true, desc: "难度档位，可自定义新增、改名、排序" },
+  { key: "learningLevel", label: "学习水平", select: "single", bySubject: false, builtin: true, desc: "认知/学习层级，如记忆、理解、应用" },
+  { key: "contentDomain", label: "内容领域", select: "multiple", bySubject: true, builtin: true, desc: "学科内容板块划分" },
+  { key: "literacy", label: "核心素养", select: "multiple", bySubject: true, builtin: true, desc: "学科核心素养标签" },
+  { key: "scene", label: "情境属性", select: "single", bySubject: true, builtin: true, desc: "题目情境类型" },
+  { key: "usage", label: "教学用途", select: "multiple", bySubject: true, builtin: true, desc: "题目的教学使用场景" },
 ]
 
-export const TAG_DIMENSION_LABELS: Record<TagDimensionKey, string> = TAG_DIMENSIONS.reduce(
-  (m, d) => ({ ...m, [d.key]: d.label }),
-  {} as Record<TagDimensionKey, string>,
-)
-
-// 标签字典作用域：平台基准（所有区域共享）或具体机构名（市/区/校）
+// 标���字典作用域：平台基准（所有区域共享）或具体机构名（市/区/校）
 export const BASE_SCOPE = "base"
 
 // 标签项：一条具体的字典值。scope = BASE_SCOPE（平台基准）或机构名（区域专属）
@@ -313,11 +308,12 @@ export function tagScopeChain(scopeName?: string): string[] {
 export function resolveTagOptions(
   items: TagItem[],
   disables: TagDisable[],
+  dimensions: TagDimensionMeta[],
   dimensionKey: TagDimensionKey,
   subject: string,
   scopeName?: string,
 ): TagItem[] {
-  const meta = TAG_DIMENSIONS.find((d) => d.key === dimensionKey)
+  const meta = dimensions.find((d) => d.key === dimensionKey)
   const chain = tagScopeChain(scopeName)
   const chainSet = new Set(chain)
   const disabledIds = new Set(
@@ -371,12 +367,17 @@ export interface Question extends LeveledResource {
   difficulty: Difficulty
   // 题目打知识点标签 —— 这是归集与自动挂载的依据
   knowledgePointIds: string[]
-  // 教师端标注维度
+  // 教师端标注维度（兼容旧字段，用于卡片详情展示）
   literacy?: string[] // 核心素养
-  cognitive?: string // 认知层级
+  cognitive?: string // 认知层级（= 学习水平）
   usage?: string[] // 教学用途
   scene?: string // 情景属性
   teachTags?: string[] // 自定义教学标签
+  // 维度标注值：按维度 key 存所选标签名（含自定义维度），是动态标注的统一存储
+  dimTags?: Record<string, string[]>
+
+
+
   // 讲解资源
   videoTitle?: string
   videoDuration?: string

@@ -41,7 +41,7 @@ export default function NewQuestionPage() {
 function NewQuestionInner() {
   const router = useRouter()
   const params = useSearchParams()
-  const { addQuestion, knowledgePoints, textbooks, chapters, resolveTags } = useStore()
+  const { addQuestion, knowledgePoints, textbooks, chapters, resolveTags, tagDimensions } = useStore()
 
   // 教材已在外部确定：从 URL 读取，缺省回退首本
   const textbookId = params.get("textbook") || textbooks[0]?.id || ""
@@ -66,13 +66,22 @@ function NewQuestionInner() {
 
   // —— 标注体系 ——
   const [kpIds, setKpIds] = useState<string[]>([])
-  const [literacy, setLiteracy] = useState<string[]>([])
-  const [cognitive, setCognitive] = useState("")
-  const [usage, setUsage] = useState<string[]>([])
-  const [scene, setScene] = useState("")
+  // 各维度标注值（按维度 key 存所选标签名，含自定义维度）
+  const [dimTags, setDimTags] = useState<Record<string, string[]>>({})
   const [teachTags, setTeachTags] = useState<string[]>([])
   const [tagInput, setTagInput] = useState("")
   const [aiGenerating, setAiGenerating] = useState(false)
+
+  // 设置某维度标注值；single 维度存为单元素数组
+  function setDimValue(key: string, vals: string[]) {
+    setDimTags((prev) => ({ ...prev, [key]: vals }))
+  }
+  function toggleDimValue(key: string, v: string) {
+    setDimTags((prev) => {
+      const cur = prev[key] ?? []
+      return { ...prev, [key]: cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v] }
+    })
+  }
 
   // —— 章节挂载（教材固定，仅选章节）——
   const [mountChapterIds, setMountChapterIds] = useState<string[]>(
@@ -89,23 +98,17 @@ function NewQuestionInner() {
   const isChoice = type === "single" || type === "multiple"
   const subjectKps = knowledgePoints.filter((k) => k.subject === subject)
 
-  // 标注选项改从「标签字典」按 当前学科 + 归属区域(ownerScope) 动态解析
-  // ownerScope 为空时回退平台基准
-  const literacyOpts = useMemo(
-    () => resolveTags("literacy", subject, ownerScope).map((t) => t.name),
-    [resolveTags, subject, ownerScope],
-  )
-  const learningLevelOpts = useMemo(
-    () => resolveTags("learningLevel", "通用", ownerScope).map((t) => t.name),
-    [resolveTags, ownerScope],
-  )
-  const usageOpts = useMemo(
-    () => resolveTags("usage", subject, ownerScope).map((t) => t.name),
-    [resolveTags, subject, ownerScope],
-  )
-  const sceneOpts = useMemo(
-    () => resolveTags("scene", subject, ownerScope).map((t) => t.name),
-    [resolveTags, subject, ownerScope],
+  // 标注维度（除难度外）按 当前学科 + 归属区域(ownerScope) 动态解析其可选标签。
+  // ownerScope 为空时回退平台基准；含管理端新增的自定义维度。
+  const annotationDims = useMemo(
+    () =>
+      tagDimensions
+        .filter((d) => d.key !== "difficulty")
+        .map((d) => ({
+          ...d,
+          options: resolveTags(d.key, d.bySubject ? subject : "通用", ownerScope).map((t) => t.name),
+        })),
+    [tagDimensions, resolveTags, subject, ownerScope],
   )
   // 难度档位显示名（字典仅配置名称，档位仍为 1~5）
   const difficultyNameByTier = useMemo(() => {
@@ -155,10 +158,13 @@ function NewQuestionInner() {
     if (!stem.trim()) return toast.error("请先填写题干，AI 将据此生成标注")
     setAiGenerating(true)
     setTimeout(() => {
-      setLiteracy(literacyOpts.slice(0, 2))
-      setCognitive(learningLevelOpts[1] ?? learningLevelOpts[0] ?? "")
-      setUsage(usageOpts.slice(0, 2))
-      setScene(sceneOpts[0] ?? "")
+      // 为每个维度按其单/多选生成建议值
+      const next: Record<string, string[]> = {}
+      for (const d of annotationDims) {
+        if (!d.options.length) continue
+        next[d.key] = d.select === "single" ? d.options.slice(0, 1) : d.options.slice(0, 2)
+      }
+      setDimTags(next)
       setTeachTags((p) => Array.from(new Set([...p, "AI 推荐", "易错点"])))
       if (subjectKps.length) setKpIds((p) => (p.length ? p : [subjectKps[0].id]))
       setAiGenerating(false)

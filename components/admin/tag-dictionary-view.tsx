@@ -2,14 +2,14 @@
 
 import { useMemo, useState } from "react"
 import { toast } from "sonner"
-import { ChevronDown, ChevronUp, Info, Pencil, Plus, Tags, Trash2 } from "lucide-react"
+import { ChevronDown, ChevronUp, Info, LayoutList, Pencil, Plus, Tags, Trash2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useStore } from "@/lib/store"
 import { SUBJECTS } from "@/lib/mock-data"
 import {
   BASE_SCOPE,
+  DIFFICULTY_DIM_KEY,
   ORG_TREE,
-  TAG_DIMENSIONS,
   tagScopeChain,
   UNIVERSAL_SUBJECT,
   type TagDimensionKey,
@@ -57,21 +57,33 @@ const SCOPE_LEVEL_LABEL: Record<ScopeOption["level"], string> = {
 }
 
 export function TagDictionaryView() {
-  const { tagItems, tagDisables, addTagItem, updateTagItem, removeTagItem, reorderTagItem, toggleTagDisable, resolveTags } =
-    useStore()
+  const {
+    tagDimensions,
+    addTagDimension,
+    updateTagDimension,
+    removeTagDimension,
+    tagItems,
+    tagDisables,
+    addTagItem,
+    updateTagItem,
+    removeTagItem,
+    reorderTagItem,
+    toggleTagDisable,
+    resolveTags,
+  } = useStore()
 
   const scopeOptions = useMemo(buildScopeOptions, [])
   // 学科选项：通用 + 各具体学科。通用学科承载难度、学习水平等通用标准
   const subjectOptions = useMemo(() => [UNIVERSAL_SUBJECT, ...SUBJECTS], [])
   const [subject, setSubject] = useState<string>(UNIVERSAL_SUBJECT)
   const [scope, setScope] = useState<string>(BASE_SCOPE)
-  const [activeDim, setActiveDim] = useState<TagDimensionKey>("difficulty")
+  const [activeDim, setActiveDim] = useState<TagDimensionKey>(DIFFICULTY_DIM_KEY)
 
   const isUniversal = subject === UNIVERSAL_SUBJECT
   // 当前学科下可见的维度：通用学科显示通用维度，具体学科显示按学科维度
   const visibleDims = useMemo(
-    () => TAG_DIMENSIONS.filter((d) => (isUniversal ? !d.bySubject : d.bySubject)),
-    [isUniversal],
+    () => tagDimensions.filter((d) => (isUniversal ? !d.bySubject : d.bySubject)),
+    [tagDimensions, isUniversal],
   )
 
   // 切换学科后，若当前维度不在可见列表内，自动切到该学科第一个维度
@@ -84,10 +96,16 @@ export function TagDictionaryView() {
   const [editing, setEditing] = useState<TagItem | null>(null) // null = 新增
   const [nameInput, setNameInput] = useState("")
 
+  // 维度弹窗：新增 / 改名
+  const [dimDialogOpen, setDimDialogOpen] = useState(false)
+  const [dimEditingKey, setDimEditingKey] = useState<string | null>(null) // null = 新增
+  const [dimName, setDimName] = useState("")
+  const [dimBySubject, setDimBySubject] = useState(false)
+
   const isBase = scope === BASE_SCOPE
   const scopeMeta = scopeOptions.find((s) => s.value === scope)!
-  const meta = TAG_DIMENSIONS.find((d) => d.key === activeDim)!
-  const subjForActive = meta.bySubject ? subject : UNIVERSAL_SUBJECT
+  const meta = visibleDims.find((d) => d.key === activeDim) ?? tagDimensions.find((d) => d.key === activeDim)
+  const subjForActive = meta?.bySubject ? subject : UNIVERSAL_SUBJECT
 
   // 左侧各维度在当前作用域下的可用标签数（用于角标）
   const dimCounts = useMemo(() => {
@@ -144,7 +162,7 @@ export function TagDictionaryView() {
     } else {
       const maxOrder = ownItems.reduce((mx, t) => Math.max(mx, t.order), 0)
       // 难度维度：新增档位时自动续接 tier 序号
-      const isDifficulty = activeDim === "difficulty"
+      const isDifficulty = activeDim === DIFFICULTY_DIM_KEY
       const maxTier = isDifficulty
         ? tagItems
             .filter((t) => t.dimensionKey === "difficulty")
@@ -161,6 +179,46 @@ export function TagDictionaryView() {
       toast.success("标签已新增")
     }
     setEditOpen(false)
+  }
+
+  // —— 维度：新增 / 改名 / 删除 ——
+  function openAddDim() {
+    setDimEditingKey(null)
+    setDimName("")
+    setDimBySubject(!isUniversal) // 当前在具体学科则默认按学科归属
+    setDimDialogOpen(true)
+  }
+  function openRenameDim() {
+    if (!meta) return
+    setDimEditingKey(meta.key)
+    setDimName(meta.label)
+    setDimBySubject(meta.bySubject)
+    setDimDialogOpen(true)
+  }
+  function submitDim() {
+    const label = dimName.trim()
+    if (!label) {
+      toast.error("请输入维度名称")
+      return
+    }
+    if (dimEditingKey) {
+      updateTagDimension(dimEditingKey, { label })
+      toast.success("维度已更新")
+    } else {
+      addTagDimension({ label, bySubject: dimBySubject })
+      toast.success("维度已新增", {
+        description: dimBySubject ? "归属：按学科（在具体学科下配置）" : "归属：通用（全学科共享）",
+      })
+      // 若新维度归属与当前学科不匹配，切到匹配的学科视图
+      if (dimBySubject && isUniversal) setSubject(SUBJECTS[0])
+      if (!dimBySubject && !isUniversal) setSubject(UNIVERSAL_SUBJECT)
+    }
+    setDimDialogOpen(false)
+  }
+  function deleteDim() {
+    if (!meta) return
+    removeTagDimension(meta.key)
+    toast.success(`维度「${meta.label}」已删除`)
   }
 
   return (
@@ -223,7 +281,23 @@ export function TagDictionaryView() {
       <div className="flex flex-col gap-5 md:flex-row">
         {/* 左：维度列表 */}
         <div className="w-full shrink-0 md:w-52">
+          <div className="mb-2 flex items-center justify-between px-1">
+            <span className="text-xs font-medium text-muted-foreground">
+              {isUniversal ? "通用维度" : `${subject}维度`}
+            </span>
+            <button
+              onClick={openAddDim}
+              className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs text-brand transition hover:bg-brand-soft"
+            >
+              <Plus className="size-3.5" /> 新增维度
+            </button>
+          </div>
           <div className="flex flex-col gap-1 rounded-xl border border-border bg-card p-2">
+            {visibleDims.length === 0 && (
+              <p className="px-3 py-6 text-center text-xs text-muted-foreground">
+                暂无维度，点击上方新增
+              </p>
+            )}
             {visibleDims.map((d) => {
               const active = d.key === activeDim
               return (
@@ -257,15 +331,42 @@ export function TagDictionaryView() {
           <div className="rounded-xl border border-border bg-card">
             {/* 维度头 */}
             <div className="flex flex-wrap items-center gap-3 border-b border-border px-4 py-3">
-              <h2 className="text-sm font-semibold text-foreground">{meta.label}</h2>
-              <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
-                {meta.select === "single" ? "单选" : "多选"}
-              </span>
-              <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
-                {meta.bySubject ? `按学科 · ${subject}` : "全学科通用"}
-              </span>
-              <span className="text-xs text-muted-foreground">{meta.desc}</span>
-              <Button size="sm" className="ml-auto gap-1" onClick={openAdd}>
+              <h2 className="text-sm font-semibold text-foreground">{meta?.label ?? "—"}</h2>
+              {meta && (
+                <>
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+                    {meta.select === "single" ? "单选" : "多选"}
+                  </span>
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+                    {meta.bySubject ? `按学科 · ${subject}` : "全学科通用"}
+                  </span>
+                  {!meta.builtin && (
+                    <span className="rounded-full bg-brand-soft px-2 py-0.5 text-[11px] text-brand">自定义</span>
+                  )}
+                  {/* 维度改名 / 删除（仅基准作用域可改维度本身） */}
+                  {isBase && (
+                    <div className="flex items-center gap-0.5">
+                      <button
+                        onClick={openRenameDim}
+                        className="grid size-7 place-items-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                        aria-label="维度改名"
+                        title="维度改名"
+                      >
+                        <Pencil className="size-3.5" />
+                      </button>
+                      <button
+                        onClick={deleteDim}
+                        className="grid size-7 place-items-center rounded-md text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
+                        aria-label="删除维度"
+                        title="删除维度"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+              <Button size="sm" className="ml-auto gap-1" onClick={openAdd} disabled={!meta}>
                 <Plus className="size-4" /> 新增标签
               </Button>
             </div>
@@ -383,14 +484,14 @@ export function TagDictionaryView() {
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{editing ? "编辑标签" : `新增标签 · ${meta.label}`}</DialogTitle>
+            <DialogTitle>{editing ? "编辑标签" : `新增标签 · ${meta?.label ?? ""}`}</DialogTitle>
           </DialogHeader>
           <div className="flex flex-col gap-2 py-1">
             <label className="text-xs font-medium text-muted-foreground">标签名称</label>
             <Input
               value={nameInput}
               onChange={(e) => setNameInput(e.target.value)}
-              placeholder={`请���入${meta.label}标签名称`}
+              placeholder={`请输入${meta?.label ?? ""}标签名称`}
               onKeyDown={(e) => e.key === "Enter" && submitEdit()}
               autoFocus
             />
@@ -403,6 +504,72 @@ export function TagDictionaryView() {
               取消
             </Button>
             <Button onClick={submitEdit}>{editing ? "保存" : "新增"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 新增 / 改名维度弹窗 */}
+      <Dialog open={dimDialogOpen} onOpenChange={setDimDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{dimEditingKey ? "维度改名" : "新增标注维度"}</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-4 py-1">
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-medium text-muted-foreground">维度名称</label>
+              <Input
+                value={dimName}
+                onChange={(e) => setDimName(e.target.value)}
+                placeholder="如：思想方法、命题趋势"
+                onKeyDown={(e) => e.key === "Enter" && submitDim()}
+                autoFocus
+              />
+            </div>
+            {/* 归属：仅新增时可选；改名不改归属，避免标签错位 */}
+            {!dimEditingKey && (
+              <div className="flex flex-col gap-2">
+                <label className="text-xs font-medium text-muted-foreground">归属</label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setDimBySubject(false)}
+                    className={cn(
+                      "flex flex-1 items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm transition",
+                      !dimBySubject ? "border-brand bg-brand-soft text-brand" : "border-border text-foreground hover:bg-muted",
+                    )}
+                  >
+                    <LayoutList className="size-4 shrink-0" />
+                    <span>
+                      通用
+                      <span className="block text-[11px] text-muted-foreground">全学科共享</span>
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDimBySubject(true)}
+                    className={cn(
+                      "flex flex-1 items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm transition",
+                      dimBySubject ? "border-brand bg-brand-soft text-brand" : "border-border text-foreground hover:bg-muted",
+                    )}
+                  >
+                    <Tags className="size-4 shrink-0" />
+                    <span>
+                      按学科
+                      <span className="block text-[11px] text-muted-foreground">各学科独立配置</span>
+                    </span>
+                  </button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  新增维度默认按多选标注，标签在「平台基准」下配置后，区域可继承或停用。
+                </p>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDimDialogOpen(false)}>
+              取消
+            </Button>
+            <Button onClick={submitDim}>{dimEditingKey ? "保存" : "新增维度"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

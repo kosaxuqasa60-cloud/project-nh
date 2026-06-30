@@ -14,7 +14,7 @@ import {
   tagItems as seedTagItems,
   textbooks as seedTextbooks,
 } from "./mock-data"
-import { PREMIUM_CATEGORY_LABELS, QUESTION_TYPE_LABELS, resolveTagOptions } from "./types"
+import { DEFAULT_TAG_DIMENSIONS, PREMIUM_CATEGORY_LABELS, QUESTION_TYPE_LABELS, resolveTagOptions } from "./types"
 import type {
   AirClass,
   Assignment,
@@ -29,6 +29,7 @@ import type {
   ResourceLevel,
   SyncResourceType,
   TagDimensionKey,
+  TagDimensionMeta,
   TagDisable,
   TagItem,
   Textbook,
@@ -44,7 +45,11 @@ interface StoreValue {
   premiums: Premium[]
   knowledgePoints: KnowledgePoint[]
   syncLinks: ChapterSyncLink[]
-  // 标签字典：标签项 + 区域停用覆盖
+  // 标签字典：维度 + 标签项 + 区域停用覆盖
+  tagDimensions: TagDimensionMeta[]
+  addTagDimension: (d: { label: string; bySubject: boolean }) => void
+  updateTagDimension: (key: TagDimensionKey, patch: Partial<TagDimensionMeta>) => void
+  removeTagDimension: (key: TagDimensionKey) => void
   tagItems: TagItem[]
   tagDisables: TagDisable[]
   addTagItem: (t: Omit<TagItem, "id">) => void
@@ -153,6 +158,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [knowledgePoints, setKnowledgePoints] =
     useState<KnowledgePoint[]>(seedKnowledgePoints)
   const [syncLinks, setSyncLinks] = useState<ChapterSyncLink[]>(seedSyncLinks)
+  const [tagDimensions, setTagDimensions] = useState<TagDimensionMeta[]>(DEFAULT_TAG_DIMENSIONS)
   const [tagItems, setTagItems] = useState<TagItem[]>(seedTagItems)
   const [tagDisables, setTagDisables] = useState<TagDisable[]>(seedTagDisables)
 
@@ -188,6 +194,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       premiums,
       knowledgePoints,
       syncLinks,
+      tagDimensions,
+      addTagDimension: ({ label, bySubject }) => {
+        const key = nextId("dim")
+        setTagDimensions((prev) => [
+          ...prev,
+          { key, label, select: "multiple", bySubject, builtin: false, desc: "自定义维度" },
+        ])
+      },
+      updateTagDimension: (key, patch) =>
+        setTagDimensions((prev) => prev.map((d) => (d.key === key ? { ...d, ...patch } : d))),
+      removeTagDimension: (key) => {
+        setTagDimensions((prev) => prev.filter((d) => d.key !== key))
+        // 连带清除该维度下的标签与停用记录
+        setTagItems((prev) => {
+          const removedIds = new Set(prev.filter((t) => t.dimensionKey === key).map((t) => t.id))
+          setTagDisables((dz) => dz.filter((z) => !removedIds.has(z.tagId)))
+          return prev.filter((t) => t.dimensionKey !== key)
+        })
+      },
       tagItems,
       tagDisables,
       addTagItem: (t) =>
@@ -229,7 +254,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           return prev.filter((d) => !(d.tagId === tagId && d.scope === scope))
         }),
       resolveTags: (dimensionKey, subject, scopeName) =>
-        resolveTagOptions(tagItems, tagDisables, dimensionKey, subject, scopeName),
+        resolveTagOptions(tagItems, tagDisables, tagDimensions, dimensionKey, subject, scopeName),
       addTextbook: (tb) => {
         const created: Textbook = { ...tb, id: nextId("tb"), updatedAt: today() }
         setTextbooks((prev) => [created, ...prev])
@@ -410,7 +435,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           prev.map((q) => {
             if (q.id !== familyId) return q
             const nextVersion = Math.max(...q.versions.map((v) => v.version)) + 1
-            // 旧版本全部归档（保留各自统计），新版本成为当前生效版本、统计清零
+            // 旧版本全部归档（保留各自统计），新版本成为当前生效版本、统计清���
             const archived = q.versions.map((v) => ({ ...v, status: "archived" as const }))
             const newVer = {
               version: nextVersion,
@@ -596,6 +621,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       premiums,
       knowledgePoints,
       syncLinks,
+      tagDimensions,
       tagItems,
       tagDisables,
     ],
