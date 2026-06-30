@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react"
 import Link from "next/link"
-import { Crown, FileText, Layers, Pencil, Plus, Search, Trash2, Video } from "lucide-react"
+import { Crown, Eye, FileText, Layers, Pencil, Plus, Search, Trash2, Video } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { useStore } from "@/lib/store"
@@ -167,9 +167,20 @@ function TopicCard({ data, onDelete }: { data: Premium; onDelete: () => void }) 
       {/* 操作 */}
       <div className="mt-3 flex items-center gap-2">
         {isTopic ? (
-          <Link href={editHref} className={cn(buttonVariants({ size: "sm", variant: "outline" }), "flex-1 gap-1.5")}>
-            <Pencil className="size-3.5" /> 编辑专题
-          </Link>
+          <>
+            <Link
+              href={`/resources/premium/topics/${data.id}/preview`}
+              className={cn(buttonVariants({ size: "sm" }), "flex-1 gap-1.5")}
+            >
+              <Eye className="size-3.5" /> 预览
+            </Link>
+            <Link
+              href={editHref}
+              className={cn(buttonVariants({ size: "sm", variant: "outline" }), "flex-1 gap-1.5")}
+            >
+              <Pencil className="size-3.5" /> 编辑
+            </Link>
+          </>
         ) : (
           <span className="flex-1 text-center text-xs text-muted-foreground">
             {PREMIUM_CATEGORY_LABELS[data.category]}（暂不支持结构化编辑）
