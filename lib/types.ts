@@ -464,6 +464,8 @@ export interface Premium extends LeveledResource {
   updatedAt: string
   // 专题资源（category="special"）的结构化题目包：有序板块
   sections?: TopicSection[]
+  coverImage?: string // 专题封面图
+  lockVideoUntilAnswered?: boolean // 学生需先作答才能解锁视频讲解
 }
 
 // ===================== 专题资源：结构化题目包 =====================
@@ -472,10 +474,11 @@ export interface Premium extends LeveledResource {
 // 题目在专题内直接录入，视频讲解挂在题目条目上。
 export type TopicItemType = "text" | "question"
 
-// 视频讲解
+// 视频讲解（模拟上传：url 为本地 object/data URL，fileName 为原文件名）
 export interface TopicVideo {
   title?: string // 如 “视频1”
   url?: string // 视频地址
+  fileName?: string // 上传的原始文件名
   duration?: string // 时长，如 “3:25”
 }
 
@@ -487,13 +490,22 @@ export interface TopicTextItem {
   content: string // 讲解正文
 }
 
-// 题目条目：专题内直接录入的题目，含可选视频讲解
+// 选择题选项
+export interface TopicOption {
+  id: string
+  text: string
+  correct: boolean
+}
+
+// 题目条目：专题内直接录入的题目，含题型、可选选项与视频讲解
 export interface TopicQuestionItem {
   id: string
   type: "question"
+  qType: QuestionType // 题型：单选/多选/填空/判断/解答
   label?: string // 题目编号/标识，如 “例1” “1”
   stem: string // 题干
-  answer?: string // 答案
+  options?: TopicOption[] // 单选/多选的选项及正确标记
+  answer?: string // 填空/解答/判断的参考答案（判断为 “对”/“错”）
   analysis?: string // 解析
   video?: TopicVideo // 视频讲解
 }

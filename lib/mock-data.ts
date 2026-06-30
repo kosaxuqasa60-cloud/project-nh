@@ -622,6 +622,7 @@ export const premiums: Premium[] = [
     chapterMounts: [],
     usedCount: 96,
     updatedAt: "2026-06-05",
+    lockVideoUntilAnswered: true,
     sections: [
       {
         id: "sec-1",
@@ -642,6 +643,7 @@ export const premiums: Premium[] = [
           {
             id: "it-2",
             type: "question",
+            qType: "subjective",
             label: "例1",
             stem: "买甲、乙两种笔共 210 支，甲种笔每支价值 3 元，乙种笔每支价值 4 元，两种笔用去的钱相同，甲种笔买了多少支？",
             answer: "120 支",
@@ -651,6 +653,7 @@ export const premiums: Premium[] = [
           {
             id: "it-3",
             type: "question",
+            qType: "subjective",
             label: "例2",
             stem: "水泥、石子、黄砂各有 5 吨，按 5:3:2 拌制某种混凝土。若用完石子，水泥缺多少吨，黄砂多多少吨？",
             answer: "水泥缺 3又1/3 吨，黄砂多 1又2/3 吨",
@@ -660,6 +663,7 @@ export const premiums: Premium[] = [
           {
             id: "it-4",
             type: "question",
+            qType: "subjective",
             label: "例3",
             stem: "有一块铜锌合金，铜与锌的比是 2:3。现加入锌 6 克，共得新合金 36 克，则新合金内铜与锌的比为多少？",
             answer: "1:2",
@@ -669,6 +673,7 @@ export const premiums: Premium[] = [
           {
             id: "it-5",
             type: "question",
+            qType: "subjective",
             label: "例4",
             stem: "某船第一次顺流航行 21 千米、逆流航行 4 千米；第二次在同一河道顺流航行 12 千米、逆流航行 7 千米，两次所用时间相等。顺水船速与逆水船速之比是多少？",
             answer: "3:1",
@@ -696,14 +701,23 @@ export const premiums: Premium[] = [
           {
             id: "it-7",
             type: "question",
+            qType: "single",
             label: "1",
             stem: "某车库停放若干辆双轮摩托车和四轮小汽车，车的辆数与车的轮子数的比是 3:7。摩托车的辆数与小汽车的辆数的比是多少？",
+            options: [
+              { id: "o1", text: "5:1", correct: true },
+              { id: "o2", text: "1:5", correct: false },
+              { id: "o3", text: "3:7", correct: false },
+              { id: "o4", text: "7:3", correct: false },
+            ],
             answer: "5:1",
+            analysis: "设摩托车 a 辆、小汽车 b 辆，轮子数 2a+4b。(a+b):(2a+4b)=3:7，解得 a:b=5:1。",
             video: { title: "视频1", url: "https://video.dianzhebi.com/topic10/v1.mp4", duration: "3:12" },
           },
           {
             id: "it-8",
             type: "question",
+            qType: "subjective",
             label: "2",
             stem: "甲、乙两人步行速度比是 11:9。若由 A、B 两地同时出发相向而行，0.5 小时后相遇；若同向而行，甲追上乙需要多少小时？",
             answer: "5 小时",
@@ -712,6 +726,7 @@ export const premiums: Premium[] = [
           {
             id: "it-9",
             type: "question",
+            qType: "subjective",
             label: "3",
             stem: "小明和小方各走一段路，小明走的路程比小方多 1/5，小方用的时间比小明多 1/9。小明和小方的速度之比是多少？",
             answer: "4:3",
@@ -720,6 +735,7 @@ export const premiums: Premium[] = [
           {
             id: "it-10",
             type: "question",
+            qType: "subjective",
             label: "4",
             stem: "圆柱容器中放有一个长方体铁块。打开水龙头注水，4 分钟时水恰好没过长方体顶面，又过 21 分钟水灌满容器。已知容器高 50 厘米、长方体高 20 厘米，长方体底面积与容器底面积之比是多少？",
             answer: "5:7",
@@ -734,6 +750,7 @@ export const premiums: Premium[] = [
           {
             id: "it-11",
             type: "question",
+            qType: "subjective",
             label: "1",
             stem: "自然数 A、B 满足 1/A + 1/B = 1/182，且 A:B = 7:13。那么 B − A = ?",
             answer: "72",
@@ -743,6 +760,7 @@ export const premiums: Premium[] = [
           {
             id: "it-12",
             type: "question",
+            qType: "subjective",
             label: "2",
             stem: "某小学有三个年级，一年级占全校 25%，二、三年级人数比是 3:4，已知一年级比三年级少 40 人。一年级有多少人？",
             answer: "56",
@@ -752,6 +770,7 @@ export const premiums: Premium[] = [
           {
             id: "it-13",
             type: "question",
+            qType: "subjective",
             label: "3",
             stem: "一段路分上坡、平路、下坡三段，路程之比 1:2:3，走各段所用时间之比 4:5:6。已知上坡速度为每小时 4 千米，全长 60 千米，走完全程用了多少小时？",
             answer: "75/8",
@@ -761,6 +780,7 @@ export const premiums: Premium[] = [
           {
             id: "it-14",
             type: "question",
+            qType: "subjective",
             label: "4",
             stem: "甲、乙两仓库存货吨数比为 5:4，若由甲库取出 20 吨放到乙库，则两库存货吨数比为 5:11。两仓库原存货总吨数是多少？",
             answer: "198",
@@ -776,6 +796,7 @@ export const premiums: Premium[] = [
           {
             id: "it-15",
             type: "question",
+            qType: "subjective",
             label: "1",
             stem: "已知甲、乙两数的比为 5:6，且它们最大公约数与最小公倍数的和是 217，那么甲数是多少？",
             answer: "35",
@@ -784,6 +805,7 @@ export const premiums: Premium[] = [
           {
             id: "it-16",
             type: "question",
+            qType: "subjective",
             label: "2",
             stem: "一个长方体，长与宽的比是 2:1，宽与高的比是 3:2，已知全部棱长之和是 220cm，则这个长方体的体积是多少？",
             answer: "4500",
