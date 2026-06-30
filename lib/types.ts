@@ -417,13 +417,46 @@ export interface Assignment extends LeveledResource {
   updatedAt: string
 }
 
+// 微课分类
+export type MicrolessonCategory = "sync" | "topic" | "review" | "exam" | "other"
+export const MICROLESSON_CATEGORY_LABELS: Record<MicrolessonCategory, string> = {
+  sync: "同步讲解",
+  topic: "专题突破",
+  review: "复习巩固",
+  exam: "考点精析",
+  other: "其他",
+}
+
+// 微课状态
+export type MicrolessonStatus = "draft" | "published"
+export const MICROLESSON_STATUS_LABELS: Record<MicrolessonStatus, string> = {
+  draft: "草稿",
+  published: "已发布",
+}
+
+// 微课附件（模拟上传：url 为本地 object URL）
+export interface MicrolessonAttachment {
+  id: string
+  name: string // 文件名
+  url?: string // 文件地址
+  size?: string // 文件大小，如 "2.4 MB"
+}
+
 // 微课
 export interface Microlesson extends LeveledResource {
   id: string
   title: string
   subject: string
+  grade: string // 年级（必填）
   duration: string // 时长，如 "8:30"
-  videoUrl?: string // 视频地址
+  videoUrl?: string // 视频地址（链接）
+  coverImage?: string // 封面图
+  creatorName?: string // 创作者姓名
+  creatorOrg?: string // 创作者单位 / 学校
+  intro?: string // 简介 / 课程描述
+  category?: MicrolessonCategory // 微课分类
+  status?: MicrolessonStatus // 草稿 / 已发布
+  attachments?: MicrolessonAttachment[] // 附件
   viewCount?: number // 观看数
   knowledgePointIds: string[]
   chapterMounts: { textbookId: string; chapterId: string }[]

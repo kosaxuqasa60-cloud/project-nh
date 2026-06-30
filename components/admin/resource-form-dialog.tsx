@@ -82,7 +82,9 @@ export function ResourceFormDialog({
     questions,
   } = useStore()
   const isEdit = Boolean(editing)
-  const e = editing as Partial<Question & Assignment & Microlesson & AirClass & Premium> | undefined
+  const e = editing as
+    | (Partial<Question> & Partial<Assignment> & Partial<Microlesson> & Partial<AirClass> & Partial<Premium>)
+    | undefined
 
   // 共享字段
   const [subject, setSubject] = useState(e?.subject ?? "数学")
@@ -222,7 +224,7 @@ export function ResourceFormDialog({
       else if (kind === "assignment")
         addAssignment({ ...base, title: title.trim(), questionIds })
       else if (kind === "microlesson")
-        addMicrolesson({ ...base, title: title.trim(), duration: duration || "00:00", videoUrl })
+        addMicrolesson({ ...base, title: title.trim(), grade: "七年级", duration: duration || "00:00", videoUrl })
       else if (kind === "premium")
         addPremium({ ...base, title: title.trim(), category, description, questionIds })
       else addAirClass({ ...base, title: title.trim(), teacher, scheduledAt, liveUrl })
@@ -420,7 +422,7 @@ export function ResourceFormDialog({
 
           {kind === "airclass" && (
             <div className="grid grid-cols-2 gap-4">
-              <Field label="主讲教师" required>
+              <Field label="主���教师" required>
                 <Input value={teacher} onChange={(ev) => setTeacher(ev.target.value)} placeholder="如 王明老师" />
               </Field>
               <Field label="直播时间">

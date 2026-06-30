@@ -86,6 +86,9 @@ interface StoreValue {
     a: Omit<Assignment, "id" | "updatedAt" | "chapterMounts" | "textbookIds" | "status">,
   ) => void
   addMicrolesson: (m: Omit<Microlesson, "id" | "updatedAt" | "chapterMounts">) => void
+  // 微课：新建返回 id；更新按 id 局部覆盖
+  createMicrolesson: (m: Omit<Microlesson, "id" | "updatedAt">) => string
+  updateMicrolesson: (id: string, patch: Partial<Microlesson>) => void
   addAirClass: (a: Omit<AirClass, "id" | "updatedAt" | "chapterMounts">) => void
   addPremium: (p: Omit<Premium, "id" | "updatedAt" | "chapterMounts">) => void
   // 专题资源（结构化题目包）：新建返回 id；更新按 id 局部覆盖
@@ -428,6 +431,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           { ...m, id: nextId("ml"), chapterMounts: [], updatedAt: today() } as Microlesson,
           ...prev,
         ]),
+      createMicrolesson: (m) => {
+        const id = nextId("ml")
+        setMicrolessons((prev) => [
+          { ...m, id, updatedAt: today() } as Microlesson,
+          ...prev,
+        ])
+        return id
+      },
+      updateMicrolesson: (id, patch) =>
+        setMicrolessons((prev) =>
+          prev.map((r) => (r.id === id ? { ...r, ...patch, updatedAt: today() } : r)),
+        ),
       addAirClass: (a) =>
         setAirClasses((prev) => [
           { ...a, id: nextId("ac"), chapterMounts: [], updatedAt: today() } as AirClass,
