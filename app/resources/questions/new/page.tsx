@@ -10,12 +10,8 @@ import { useStore } from "@/lib/store"
 import { MathText } from "@/components/admin/math-text"
 import { OrgScopePicker } from "@/components/admin/org-scope-picker"
 import {
-  COGNITIVE_OPTIONS,
   difficultyTier,
-  LITERACY_OPTIONS,
   QUESTION_TYPE_LABELS,
-  SCENE_OPTIONS,
-  USAGE_OPTIONS,
   type Difficulty,
   type QuestionType,
   type ResourceLevel,
@@ -45,7 +41,7 @@ export default function NewQuestionPage() {
 function NewQuestionInner() {
   const router = useRouter()
   const params = useSearchParams()
-  const { addQuestion, knowledgePoints, textbooks, chapters } = useStore()
+  const { addQuestion, knowledgePoints, textbooks, chapters, resolveTags, tagDimensions } = useStore()
 
   // 教材已在外部确定：从 URL 读取，缺省回退首本
   const textbookId = params.get("textbook") || textbooks[0]?.id || ""
@@ -70,13 +66,22 @@ function NewQuestionInner() {
 
   // —— 标注体系 ——
   const [kpIds, setKpIds] = useState<string[]>([])
-  const [literacy, setLiteracy] = useState<string[]>([])
-  const [cognitive, setCognitive] = useState("")
-  const [usage, setUsage] = useState<string[]>([])
-  const [scene, setScene] = useState("")
+  // 各维度标注值（按维度 key 存所选标签名，含自定义维度）
+  const [dimTags, setDimTags] = useState<Record<string, string[]>>({})
   const [teachTags, setTeachTags] = useState<string[]>([])
   const [tagInput, setTagInput] = useState("")
   const [aiGenerating, setAiGenerating] = useState(false)
+
+  // 设置某维度标注值；single 维度存为单元素数组
+  function setDimValue(key: string, vals: string[]) {
+    setDimTags((prev) => ({ ...prev, [key]: vals }))
+  }
+  function toggleDimValue(key: string, v: string) {
+    setDimTags((prev) => {
+      const cur = prev[key] ?? []
+      return { ...prev, [key]: cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v] }
+    })
+  }
 
   // —— 章节挂载（教材固定，仅选章节）——
   const [mountChapterIds, setMountChapterIds] = useState<string[]>(
@@ -92,6 +97,29 @@ function NewQuestionInner() {
 
   const isChoice = type === "single" || type === "multiple"
   const subjectKps = knowledgePoints.filter((k) => k.subject === subject)
+
+  // 标注维度（除难度外）按 当前学科 + 归属区域(ownerScope) 动态解析其可选标签。
+  // ownerScope 为空时回退平台基准；含管理端新增的自定义维度。
+  const annotationDims = useMemo(
+    () =>
+      tagDimensions
+        .filter((d) => d.key !== "difficulty")
+        .map((d) => ({
+          ...d,
+          options: resolveTags(d.key, d.bySubject ? subject : "通用", ownerScope).map((t) => t.name),
+        })),
+    [tagDimensions, resolveTags, subject, ownerScope],
+  )
+  // 难度档位显示名（字典仅配置名称，档位仍为 1~5）
+  const difficultyNameByTier = useMemo(() => {
+    const m: Record<number, string> = {}
+    resolveTags("difficulty", "通用", ownerScope).forEach((t) => {
+      if (t.tier) m[t.tier] = t.name
+    })
+    return m
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resolveTags, ownerScope])
+  const difficultyLabel = (d: Difficulty) => difficultyNameByTier[d] ?? `${d} 星 · ${difficultyTier(d)}`
 
   // 当前教材的可挂载章节（含子章节，按层级缩进展示）
   const mountChapters = useMemo(
@@ -130,10 +158,13 @@ function NewQuestionInner() {
     if (!stem.trim()) return toast.error("请先填写题干，AI 将据此生成标注")
     setAiGenerating(true)
     setTimeout(() => {
-      setLiteracy(LITERACY_OPTIONS.slice(0, 2))
-      setCognitive(COGNITIVE_OPTIONS[1] ?? COGNITIVE_OPTIONS[0])
-      setUsage(USAGE_OPTIONS.slice(0, 2))
-      setScene(SCENE_OPTIONS[0])
+      // 为每个维度按其单/多选生成建议值
+      const next: Record<string, string[]> = {}
+      for (const d of annotationDims) {
+        if (!d.options.length) continue
+        next[d.key] = d.select === "single" ? d.options.slice(0, 1) : d.options.slice(0, 2)
+      }
+      setDimTags(next)
       setTeachTags((p) => Array.from(new Set([...p, "AI 推荐", "易错点"])))
       if (subjectKps.length) setKpIds((p) => (p.length ? p : [subjectKps[0].id]))
       setAiGenerating(false)
@@ -158,10 +189,13 @@ function NewQuestionInner() {
       videoTitle: videoTitle.trim() || undefined,
       videoDuration: videoDuration.trim() || undefined,
       knowledgePointIds: kpIds,
-      literacy,
-      cognitive: cognitive || undefined,
-      usage,
-      scene: scene || undefined,
+      // 动态维度标注值（含自定义维度）
+      dimTags,
+      // 兼容旧字段：内置维度映射回卡片详情使用的字段
+      literacy: dimTags["literacy"] ?? [],
+      cognitive: dimTags["learningLevel"]?.[0] || undefined,
+      usage: dimTags["usage"] ?? [],
+      scene: dimTags["scene"]?.[0] || undefined,
       teachTags,
       level,
       ownerScope,
@@ -224,12 +258,12 @@ function NewQuestionInner() {
                 <Select
                   value={String(difficulty)}
                   onValueChange={(v) => setDifficulty(Number(v) as Difficulty)}
-                  items={Object.fromEntries(DIFFICULTIES.map((d) => [String(d), `${d} 星 · ${difficultyTier(d)}`]))}
+                  items={Object.fromEntries(DIFFICULTIES.map((d) => [String(d), difficultyLabel(d)]))}
                 >
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {DIFFICULTIES.map((d) => (
-                      <SelectItem key={d} value={String(d)}>{d} 星 · {difficultyTier(d)}</SelectItem>
+                      <SelectItem key={d} value={String(d)}>{difficultyLabel(d)}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -326,34 +360,41 @@ function NewQuestionInner() {
               </button>
             </div>
             <div className="space-y-4">
-              <Labeled label={`核心素养（已选 ${literacy.length}）`}>
-                <Chips options={LITERACY_OPTIONS} value={literacy} onToggle={(v) => toggle(literacy, v, setLiteracy)} />
-              </Labeled>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Labeled label="认知层级">
-                  <Select value={cognitive} onValueChange={setCognitive} items={Object.fromEntries(COGNITIVE_OPTIONS.map((o) => [o, o]))}>
-                    <SelectTrigger><SelectValue placeholder="选择认知层级" /></SelectTrigger>
-                    <SelectContent>
-                      {COGNITIVE_OPTIONS.map((o) => (
-                        <SelectItem key={o} value={o}>{o}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Labeled>
-                <Labeled label="情景属性">
-                  <Select value={scene} onValueChange={setScene} items={Object.fromEntries(SCENE_OPTIONS.map((o) => [o, o]))}>
-                    <SelectTrigger><SelectValue placeholder="选择情景属性" /></SelectTrigger>
-                    <SelectContent>
-                      {SCENE_OPTIONS.map((o) => (
-                        <SelectItem key={o} value={o}>{o}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Labeled>
-              </div>
-              <Labeled label={`教学用途（已选 ${usage.length}）`}>
-                <Chips options={USAGE_OPTIONS} value={usage} onToggle={(v) => toggle(usage, v, setUsage)} />
-              </Labeled>
+              {/* 动态标注维度（含管理端自定义维度） */}
+              {annotationDims.map((d) => {
+                const selected = dimTags[d.key] ?? []
+                if (d.select === "single") {
+                  return (
+                    <Labeled key={d.key} label={d.label}>
+                      {d.options.length ? (
+                        <Select
+                          value={selected[0] ?? ""}
+                          onValueChange={(v) => setDimValue(d.key, v ? [v] : [])}
+                          items={Object.fromEntries(d.options.map((o) => [o, o]))}
+                        >
+                          <SelectTrigger><SelectValue placeholder={`选择${d.label}`} /></SelectTrigger>
+                          <SelectContent>
+                            {d.options.map((o) => (
+                              <SelectItem key={o} value={o}>{o}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <EmptyDict />
+                      )}
+                    </Labeled>
+                  )
+                }
+                return (
+                  <Labeled key={d.key} label={`${d.label}（已选 ${selected.length}）`}>
+                    {d.options.length ? (
+                      <Chips options={d.options} value={selected} onToggle={(v) => toggleDimValue(d.key, v)} />
+                    ) : (
+                      <EmptyDict />
+                    )}
+                  </Labeled>
+                )
+              })}
               <Labeled label={`知识点（已选 ${kpIds.length}）`}>
                 {subjectKps.length ? (
                   <Chips
@@ -478,6 +519,14 @@ function Labeled({ label, children }: { label: string; children: React.ReactNode
       <label className="text-xs font-medium text-foreground">{label}</label>
       {children}
     </div>
+  )
+}
+
+function EmptyDict() {
+  return (
+    <p className="rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
+      该学科/区域下暂无可用标签，请前往「资源中心 › 标签字典」配置。
+    </p>
   )
 }
 

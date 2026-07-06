@@ -237,6 +237,96 @@ export const USAGE_OPTIONS = [
 ] // 教学用途
 export const SCENE_OPTIONS = ["纯数学情景", "生活情景", "跨学科情景"] // 情景属性
 
+// ===================== 题目标签体系（字典管理） =====================
+// 标注维度可后台自定义增删（内置维度 + 自定义维度），各维度下再配置具体标签。
+// 知识点是独立体系（KnowledgePoint，绑定学科/章节），不在此维度内重复管理。
+// 维度 key：内置为固定字符串（difficulty 等），自定义为生成的 "dim-xxx"。
+export type TagDimensionKey = string
+
+// 通用学科：难度、学习水平等通用标准归入该学科，全学科共享
+export const UNIVERSAL_SUBJECT = "通用"
+
+export interface TagDimensionMeta {
+  key: TagDimensionKey
+  label: string
+  select: "single" | "multiple" // 题目标注时单选 / 多选
+  bySubject: boolean // 是否按学科区分（false=通用标准，归入“通用”学科）
+  builtin: boolean // 是否内置维度（内置可改名/删除，自定义同样可删）
+  desc: string
+}
+
+// 难度维度的固定 key：题目难度走独立的 difficulty 数值字段，UI 特殊处理
+export const DIFFICULTY_DIM_KEY = "difficulty"
+
+// 内置维度种子。store 以此初始化为可变状态，后续支持增删改。
+export const DEFAULT_TAG_DIMENSIONS: TagDimensionMeta[] = [
+  { key: "difficulty", label: "难度", select: "single", bySubject: false, builtin: true, desc: "难度档位，可自定义新增、改名、排序" },
+  { key: "learningLevel", label: "学习水平", select: "single", bySubject: false, builtin: true, desc: "认知/学习层级，如记忆、理解、应用" },
+  { key: "contentDomain", label: "内容领域", select: "multiple", bySubject: true, builtin: true, desc: "学科内容板块划分" },
+  { key: "literacy", label: "核心素养", select: "multiple", bySubject: true, builtin: true, desc: "学科核心素养标签" },
+  { key: "scene", label: "情境属性", select: "single", bySubject: true, builtin: true, desc: "题目情境类型" },
+  { key: "usage", label: "教学用途", select: "multiple", bySubject: true, builtin: true, desc: "题目的教学使用场景" },
+]
+
+// 标���字典作用域：平台基准（所有区域共享）或具体机构名（市/区/校）
+export const BASE_SCOPE = "base"
+
+// 标签项：一条具体的字典值。scope = BASE_SCOPE（平台基准）或机构名（区域专属）
+export interface TagItem {
+  id: string
+  dimensionKey: TagDimensionKey
+  subject: string // 通用维度（难度）用 "通用"
+  name: string
+  order: number
+  scope: string // BASE_SCOPE | 机构名（如 "上海市" / "徐汇区"）
+  tier?: number // 难度专用：固定档位 1~5
+}
+
+// 区域对“基准标签”的停用覆盖（区域可隐藏不适用的基准项，但不删除基准）
+export interface TagDisable {
+  tagId: string
+  scope: string // 在该机构下停用
+}
+
+// 给定机构名，返回从平台基准到该机构的作用域继承链：[base, 市, 区, 校...]
+export function tagScopeChain(scopeName?: string): string[] {
+  if (!scopeName || scopeName === BASE_SCOPE) return [BASE_SCOPE]
+  for (const city of ORG_TREE) {
+    if (city.name === scopeName) return [BASE_SCOPE, city.name]
+    for (const d of city.districts) {
+      if (d.name === scopeName) return [BASE_SCOPE, city.name, d.name]
+      for (const s of d.schools) {
+        if (s.name === scopeName) return [BASE_SCOPE, city.name, d.name, s.name]
+      }
+    }
+  }
+  return [BASE_SCOPE]
+}
+
+// 解析某维度在“某学科 + 某机构”下最终可用的标签：
+// 基准 + 继承链上各级区域专属，减去链上任意一级停用的项；按 order 排序。
+export function resolveTagOptions(
+  items: TagItem[],
+  disables: TagDisable[],
+  dimensions: TagDimensionMeta[],
+  dimensionKey: TagDimensionKey,
+  subject: string,
+  scopeName?: string,
+): TagItem[] {
+  const meta = dimensions.find((d) => d.key === dimensionKey)
+  const chain = tagScopeChain(scopeName)
+  const chainSet = new Set(chain)
+  const disabledIds = new Set(
+    disables.filter((d) => chainSet.has(d.scope)).map((d) => d.tagId),
+  )
+  return items
+    .filter((t) => t.dimensionKey === dimensionKey)
+    .filter((t) => (meta?.bySubject ? t.subject === subject : true))
+    .filter((t) => chainSet.has(t.scope))
+    .filter((t) => !disabledIds.has(t.id))
+    .sort((a, b) => a.order - b.order)
+}
+
 // 题目版本状态：草稿 / 已发布（当前生效）/ 已归档（被新版本取代，仅保留统计可追溯）
 export type QuestionVersionStatus = "draft" | "published" | "archived"
 export const QUESTION_VERSION_STATUS_LABELS: Record<QuestionVersionStatus, string> = {
@@ -277,12 +367,17 @@ export interface Question extends LeveledResource {
   difficulty: Difficulty
   // 题目打知识点标签 —— 这是归集与自动挂载的依据
   knowledgePointIds: string[]
-  // 教师端标注维度
+  // 教师端标注维度（兼容旧字段，用于卡片详情展示）
   literacy?: string[] // 核心素养
-  cognitive?: string // 认知层级
+  cognitive?: string // 认知层级（= 学习水平）
   usage?: string[] // 教学用途
   scene?: string // 情景属性
   teachTags?: string[] // 自定义教学标签
+  // 维度标注值：按维度 key 存所选标签名（含自定义维度），是动态标注的统一存储
+  dimTags?: Record<string, string[]>
+
+
+
   // 讲解资源
   videoTitle?: string
   videoDuration?: string
@@ -322,13 +417,46 @@ export interface Assignment extends LeveledResource {
   updatedAt: string
 }
 
+// 微课分类
+export type MicrolessonCategory = "sync" | "topic" | "review" | "exam" | "other"
+export const MICROLESSON_CATEGORY_LABELS: Record<MicrolessonCategory, string> = {
+  sync: "同步讲解",
+  topic: "专题突破",
+  review: "复习巩固",
+  exam: "考点精析",
+  other: "其他",
+}
+
+// 微课状态
+export type MicrolessonStatus = "draft" | "published"
+export const MICROLESSON_STATUS_LABELS: Record<MicrolessonStatus, string> = {
+  draft: "草稿",
+  published: "已发布",
+}
+
+// 微课附件（模拟上传：url 为本地 object URL）
+export interface MicrolessonAttachment {
+  id: string
+  name: string // 文件名
+  url?: string // 文件地址
+  size?: string // 文件大小，如 "2.4 MB"
+}
+
 // 微课
 export interface Microlesson extends LeveledResource {
   id: string
   title: string
   subject: string
+  grade: string // 年级（必填）
   duration: string // 时长，如 "8:30"
-  videoUrl?: string // 视频地址
+  videoUrl?: string // 视频地址（链接）
+  coverImage?: string // 封面图
+  creatorName?: string // 创作者姓名
+  creatorOrg?: string // 创作者单位 / 学校
+  intro?: string // 简介 / 课程描述
+  category?: MicrolessonCategory // 微课分类
+  status?: MicrolessonStatus // 草稿 / 已发布
+  attachments?: MicrolessonAttachment[] // 附件
   viewCount?: number // 观看数
   knowledgePointIds: string[]
   chapterMounts: { textbookId: string; chapterId: string }[]
@@ -367,6 +495,78 @@ export interface Premium extends LeveledResource {
   chapterMounts: { textbookId: string; chapterId: string }[]
   usedCount?: number
   updatedAt: string
+  // 专题资源（category="special"）的结构化题目包：有序板块
+  sections?: TopicSection[]
+  coverImage?: string // 专题封面图
+}
+
+// ===================== 专题资源：结构化题目包 =====================
+// 专题 = 多个有序板块（Section），每个板块下多个条目（Item）。
+// 条目要么是“纯文本块”（补充知识/自我归纳等讲解），要么是“题目”（题干+答案+解析+视频讲解）。
+// 题目在专题内直接录入，视频讲解挂在题目条目上。
+export type TopicItemType = "text" | "question"
+
+// 视频讲解（模拟上传：url 为本地 object/data URL，fileName 为原文件名）
+export interface TopicVideo {
+  title?: string // 如 “视频1”
+  url?: string // 视频地址
+  fileName?: string // 上传的原始文件名
+  duration?: string // 时长，如 “3:25”
+}
+
+// 纯文本块：补充知识、自我归纳等非题目内容
+export interface TopicTextItem {
+  id: string
+  type: "text"
+  title?: string // 文本块小标题（可选）
+  content: string // 讲解正文
+}
+
+// 选择题选项
+export interface TopicOption {
+  id: string
+  text: string
+  correct: boolean
+}
+
+// 题目条目：专题内直接录入的题目，含题型、可选选项与视频讲解
+export interface TopicQuestionItem {
+  id: string
+  type: "question"
+  qType: QuestionType // 题型：单选/多选/填空/判断/解答
+  label?: string // 题目编号/标识，如 “例1” “1”
+  stem: string // 题干
+  options?: TopicOption[] // 单选/多选的选项及正确标记
+  answer?: string // 填空/解答/判断的参考答案（判断为 “对”/“错”）
+  analysis?: string // 解析
+  video?: TopicVideo // 视频讲解
+}
+
+export type TopicItem = TopicTextItem | TopicQuestionItem
+
+// 板块：如 补充知识 / 自学例题 / 自我检测 / 巩固练习 / 阶段练习
+export interface TopicSection {
+  id: string
+  title: string
+  intro?: string // 板块说明（可选）
+  items: TopicItem[]
+}
+
+// —— 专题统计辅助 ——
+export function topicQuestionCount(p: Pick<Premium, "sections">): number {
+  return (p.sections ?? []).reduce(
+    (n, s) => n + s.items.filter((it) => it.type === "question").length,
+    0,
+  )
+}
+export function topicVideoCount(p: Pick<Premium, "sections">): number {
+  return (p.sections ?? []).reduce(
+    (n, s) =>
+      n +
+      s.items.filter((it) => it.type === "question" && !!(it as TopicQuestionItem).video?.url)
+        .length,
+    0,
+  )
 }
 
 // 可同步的资源类型（参与教材章节挂载 / 同步关系的类型）

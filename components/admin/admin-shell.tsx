@@ -11,6 +11,7 @@ import {
   PenLine,
   Replace,
   Search,
+  Tags,
   Video,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -24,6 +25,7 @@ const RESOURCE_CHILDREN = [
   { href: "/resources/premium", label: "精品资源", icon: Crown },
   { href: "/resources/microlessons", label: "微课", icon: Video },
   { href: "/resources/airclasses", label: "空中课堂", icon: MonitorPlay },
+  { href: "/resources/tags", label: "标签字典", icon: Tags },
 ]
 
 const NAV = [

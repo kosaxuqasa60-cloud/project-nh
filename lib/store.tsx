@@ -10,9 +10,11 @@ import {
   premiums as seedPremiums,
   questions as seedQuestions,
   syncLinks as seedSyncLinks,
+  tagDisables as seedTagDisables,
+  tagItems as seedTagItems,
   textbooks as seedTextbooks,
 } from "./mock-data"
-import { PREMIUM_CATEGORY_LABELS, QUESTION_TYPE_LABELS } from "./types"
+import { DEFAULT_TAG_DIMENSIONS, PREMIUM_CATEGORY_LABELS, QUESTION_TYPE_LABELS, resolveTagOptions } from "./types"
 import type {
   AirClass,
   Assignment,
@@ -26,6 +28,10 @@ import type {
   ResourceKind,
   ResourceLevel,
   SyncResourceType,
+  TagDimensionKey,
+  TagDimensionMeta,
+  TagDisable,
+  TagItem,
   Textbook,
 } from "./types"
 
@@ -39,6 +45,21 @@ interface StoreValue {
   premiums: Premium[]
   knowledgePoints: KnowledgePoint[]
   syncLinks: ChapterSyncLink[]
+  // 标签字典：维度 + 标签项 + 区域停用覆盖
+  tagDimensions: TagDimensionMeta[]
+  addTagDimension: (d: { label: string; bySubject: boolean }) => string
+  updateTagDimension: (key: TagDimensionKey, patch: Partial<TagDimensionMeta>) => void
+  removeTagDimension: (key: TagDimensionKey) => void
+  tagItems: TagItem[]
+  tagDisables: TagDisable[]
+  addTagItem: (t: Omit<TagItem, "id">) => void
+  updateTagItem: (id: string, patch: Partial<TagItem>) => void
+  removeTagItem: (id: string) => void
+  reorderTagItem: (id: string, dir: "up" | "down") => void
+  // 在某机构下停用/启用某基准标签
+  toggleTagDisable: (tagId: string, scope: string, disabled: boolean) => void
+  // 解析某维度在“某学科 + 某机构”下的最终可用标签（基准 + 区域继承 - 停用）
+  resolveTags: (dimensionKey: TagDimensionKey, subject: string, scopeName?: string) => TagItem[]
   addTextbook: (tb: Omit<Textbook, "id" | "updatedAt">) => Textbook
   updateTextbook: (id: string, patch: Partial<Textbook>) => void
   addChapter: (c: Omit<ChapterNode, "id">) => void
@@ -65,8 +86,19 @@ interface StoreValue {
     a: Omit<Assignment, "id" | "updatedAt" | "chapterMounts" | "textbookIds" | "status">,
   ) => void
   addMicrolesson: (m: Omit<Microlesson, "id" | "updatedAt" | "chapterMounts">) => void
+  // 微课：新建返回 id；更新按 id 局部覆盖
+  createMicrolesson: (m: Omit<Microlesson, "id" | "updatedAt">) => string
+  updateMicrolesson: (id: string, patch: Partial<Microlesson>) => void
   addAirClass: (a: Omit<AirClass, "id" | "updatedAt" | "chapterMounts">) => void
   addPremium: (p: Omit<Premium, "id" | "updatedAt" | "chapterMounts">) => void
+  // 专题资源（结构化题目包）：新建返回 id；更新按 id 局部覆盖
+  createTopic: (
+    p: Pick<
+      Premium,
+      "title" | "subject" | "description" | "level" | "ownerScope" | "sections" | "coverImage"
+    >,
+  ) => string
+  updateTopic: (id: string, patch: Partial<Premium>) => void
   // 题目版本：另存为新版本（旧版本归档保留统计，新版本成为当前生效版本，统计清零）
   saveQuestionAsNewVersion: (
     familyId: string,
@@ -137,6 +169,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [knowledgePoints, setKnowledgePoints] =
     useState<KnowledgePoint[]>(seedKnowledgePoints)
   const [syncLinks, setSyncLinks] = useState<ChapterSyncLink[]>(seedSyncLinks)
+  const [tagDimensions, setTagDimensions] = useState<TagDimensionMeta[]>(DEFAULT_TAG_DIMENSIONS)
+  const [tagItems, setTagItems] = useState<TagItem[]>(seedTagItems)
+  const [tagDisables, setTagDisables] = useState<TagDisable[]>(seedTagDisables)
 
   // 四类资源共享的可挂载基础结构
   type Mountable = {
@@ -170,6 +205,68 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       premiums,
       knowledgePoints,
       syncLinks,
+      tagDimensions,
+      addTagDimension: ({ label, bySubject }) => {
+        const key = nextId("dim")
+        setTagDimensions((prev) => [
+          ...prev,
+          { key, label, select: "multiple", bySubject, builtin: false, desc: "自定义维度" },
+        ])
+        return key
+      },
+      updateTagDimension: (key, patch) =>
+        setTagDimensions((prev) => prev.map((d) => (d.key === key ? { ...d, ...patch } : d))),
+      removeTagDimension: (key) => {
+        setTagDimensions((prev) => prev.filter((d) => d.key !== key))
+        // 连带清除该维度下的标签与停用记录
+        setTagItems((prev) => {
+          const removedIds = new Set(prev.filter((t) => t.dimensionKey === key).map((t) => t.id))
+          setTagDisables((dz) => dz.filter((z) => !removedIds.has(z.tagId)))
+          return prev.filter((t) => t.dimensionKey !== key)
+        })
+      },
+      tagItems,
+      tagDisables,
+      addTagItem: (t) =>
+        setTagItems((prev) => [...prev, { ...t, id: nextId("tag") }]),
+      updateTagItem: (id, patch) =>
+        setTagItems((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t))),
+      removeTagItem: (id) => {
+        setTagItems((prev) => prev.filter((t) => t.id !== id))
+        setTagDisables((prev) => prev.filter((d) => d.tagId !== id))
+      },
+      reorderTagItem: (id, dir) =>
+        setTagItems((prev) => {
+          const target = prev.find((t) => t.id === id)
+          if (!target) return prev
+          // 仅在“同维度 + 同学科 + 同作用域”范围内交换相邻 order
+          const peers = prev
+            .filter(
+              (t) =>
+                t.dimensionKey === target.dimensionKey &&
+                t.subject === target.subject &&
+                t.scope === target.scope,
+            )
+            .sort((a, b) => a.order - b.order)
+          const idx = peers.findIndex((t) => t.id === id)
+          const swapIdx = dir === "up" ? idx - 1 : idx + 1
+          if (swapIdx < 0 || swapIdx >= peers.length) return prev
+          const a = peers[idx]
+          const b = peers[swapIdx]
+          return prev.map((t) => {
+            if (t.id === a.id) return { ...t, order: b.order }
+            if (t.id === b.id) return { ...t, order: a.order }
+            return t
+          })
+        }),
+      toggleTagDisable: (tagId, scope, disabled) =>
+        setTagDisables((prev) => {
+          const exists = prev.some((d) => d.tagId === tagId && d.scope === scope)
+          if (disabled) return exists ? prev : [...prev, { tagId, scope }]
+          return prev.filter((d) => !(d.tagId === tagId && d.scope === scope))
+        }),
+      resolveTags: (dimensionKey, subject, scopeName) =>
+        resolveTagOptions(tagItems, tagDisables, tagDimensions, dimensionKey, subject, scopeName),
       addTextbook: (tb) => {
         const created: Textbook = { ...tb, id: nextId("tb"), updatedAt: today() }
         setTextbooks((prev) => [created, ...prev])
@@ -187,7 +284,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
       importChapters: (textbookId, rows, replace) => {
         const created: ChapterNode[] = []
-        // 各层级最近一个父节点，用于把 level 转成 parentId
+        // 各层级最近���个父节点，用于把 level 转成 parentId
         const lastByLevel: Record<number, string> = {}
         // 各父节点下的排序计数
         const orderByParent: Record<string, number> = {}
@@ -334,6 +431,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           { ...m, id: nextId("ml"), chapterMounts: [], updatedAt: today() } as Microlesson,
           ...prev,
         ]),
+      createMicrolesson: (m) => {
+        const id = nextId("ml")
+        setMicrolessons((prev) => [
+          { ...m, id, updatedAt: today() } as Microlesson,
+          ...prev,
+        ])
+        return id
+      },
+      updateMicrolesson: (id, patch) =>
+        setMicrolessons((prev) =>
+          prev.map((r) => (r.id === id ? { ...r, ...patch, updatedAt: today() } : r)),
+        ),
       addAirClass: (a) =>
         setAirClasses((prev) => [
           { ...a, id: nextId("ac"), chapterMounts: [], updatedAt: today() } as AirClass,
@@ -344,13 +453,40 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           { ...p, id: nextId("pm"), chapterMounts: [], updatedAt: today() } as Premium,
           ...prev,
         ]),
+      createTopic: (p) => {
+        const id = nextId("pm")
+        setPremiums((prev) => [
+          {
+            id,
+            title: p.title,
+            subject: p.subject,
+            category: "special",
+            description: p.description,
+            questionIds: [],
+            knowledgePointIds: [],
+            chapterMounts: [],
+            level: p.level,
+            ownerScope: p.ownerScope,
+            sections: p.sections ?? [],
+            coverImage: p.coverImage,
+            usedCount: 0,
+            updatedAt: today(),
+          } as Premium,
+          ...prev,
+        ])
+        return id
+      },
+      updateTopic: (id, patch) =>
+        setPremiums((prev) =>
+          prev.map((r) => (r.id === id ? { ...r, ...patch, updatedAt: today() } : r)),
+        ),
 
       saveQuestionAsNewVersion: (familyId, content, changeNote) =>
         setQuestions((prev) =>
           prev.map((q) => {
             if (q.id !== familyId) return q
             const nextVersion = Math.max(...q.versions.map((v) => v.version)) + 1
-            // 旧版本全部归档（保留各自统计），新版本成为当前生效版本、统计清零
+            // 旧版本全部归档（保留各自统计），新版本成为当前生效版本、统计清���
             const archived = q.versions.map((v) => ({ ...v, status: "archived" as const }))
             const newVer = {
               version: nextVersion,
@@ -536,6 +672,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       premiums,
       knowledgePoints,
       syncLinks,
+      tagDimensions,
+      tagItems,
+      tagDisables,
     ],
   )
 
