@@ -9,7 +9,7 @@ import {
   ChevronRight,
   Link2,
   Plus,
-  Trash2,
+  Undo2,
 } from "lucide-react"
 import { PageHeader } from "@/components/admin/page-header"
 import { Badge } from "@/components/ui/badge"
@@ -85,11 +85,6 @@ export default function SyncMappingPage() {
     )
   }, [activeSource, sources])
 
-  function toggleLinkType(linkId: string, current: SyncResourceType[], t: SyncResourceType) {
-    const next = current.includes(t) ? current.filter((x) => x !== t) : [...current, t]
-    updateSyncLinkTypes(linkId, next)
-  }
-
   return (
     <div>
       {activeSource && activeSourceData ? (
@@ -100,10 +95,9 @@ export default function SyncMappingPage() {
           chapterTitle={chapterTitle}
           onBack={() => setActiveSource(null)}
           onAdd={() => setDialogOpen(true)}
-          onToggleType={toggleLinkType}
           onRemove={(id) => {
             removeSyncLink(id)
-            toast.success("已删除目录对应")
+            toast.success("已撤回该条目录对应")
           }}
         />
       ) : (
@@ -176,48 +170,32 @@ function SourceList({
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-3 md:grid-cols-2">
-          {sources.map((s) => (
+        <div className="overflow-hidden rounded-lg border border-border bg-card">
+          {sources.map((s, i) => (
             <button
               key={s.fromTextbookId}
               onClick={() => onOpen(s.fromTextbookId)}
-              className="group text-left"
+              className={cn(
+                "group flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-accent/40",
+                i > 0 && "border-t border-border",
+              )}
             >
-              <Card className="h-full transition-colors hover:border-primary/50 hover:bg-accent/30">
-                <CardContent className="py-4">
-                  <div className="mb-3 flex items-center gap-2">
-                    <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
-                      <BookOpen className="size-4" />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium" title={tbName(s.fromTextbookId)}>
-                        {tbName(s.fromTextbookId)}
-                      </p>
-                      <p className="text-xs text-muted-foreground">主教材</p>
-                    </div>
-                    <ChevronRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-                  </div>
-
-                  <div className="space-y-2 border-t border-border pt-3">
-                    <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <ArrowRight className="size-3.5" />
-                      同步到 {s.targetIds.length} 套目标教材 · 共 {s.links.length} 条目录对应
-                    </p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {s.targetIds.map((tid) => (
-                        <Badge
-                          key={tid}
-                          variant="secondary"
-                          className="font-normal"
-                          title={tbName(tid)}
-                        >
-                          {tbName(tid)}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                <BookOpen className="size-4" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium" title={tbName(s.fromTextbookId)}>
+                  {tbName(s.fromTextbookId)}
+                </p>
+                <p className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <ArrowRight className="size-3.5" />
+                  同步到 {s.targetIds.length} 套目标教材 · 共 {s.links.length} 条目录对应
+                </p>
+              </div>
+              <Badge variant="secondary" className="hidden shrink-0 font-normal tabular-nums sm:inline-flex">
+                {s.links.length} 条对应
+              </Badge>
+              <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
             </button>
           ))}
         </div>
@@ -234,7 +212,6 @@ function SourceDetail({
   chapterTitle,
   onBack,
   onAdd,
-  onToggleType,
   onRemove,
 }: {
   fromTextbookId: string
@@ -243,7 +220,6 @@ function SourceDetail({
   chapterTitle: (id: string) => string
   onBack: () => void
   onAdd: () => void
-  onToggleType: (id: string, current: SyncResourceType[], t: SyncResourceType) => void
   onRemove: (id: string) => void
 }) {
   // 按目标教材分组
@@ -319,41 +295,23 @@ function SourceDetail({
                         </p>
                       </div>
                       <div className="flex items-center gap-1.5 lg:border-l lg:pl-4">
-                        {SYNC_RESOURCE_TYPES.map((t) => {
-                          const active = link.syncTypes.includes(t)
-                          return (
-                            <button
-                              key={t}
-                              type="button"
-                              onClick={() => onToggleType(link.id, link.syncTypes, t)}
-                              title={
-                                active
-                                  ? `点击取消同步「${SYNC_RESOURCE_LABELS[t]}」`
-                                  : `点击同步「${SYNC_RESOURCE_LABELS[t]}」`
-                              }
-                            >
-                              <Badge
-                                variant="outline"
-                                className={cn(
-                                  "cursor-pointer font-normal transition-colors",
-                                  active
-                                    ? "border-primary/30 bg-primary/10 text-primary"
-                                    : "border-dashed text-muted-foreground/60 hover:bg-accent",
-                                )}
-                              >
-                                {SYNC_RESOURCE_LABELS[t]}
-                              </Badge>
-                            </button>
-                          )
-                        })}
+                        {SYNC_RESOURCE_TYPES.filter((t) => link.syncTypes.includes(t)).map((t) => (
+                          <Badge
+                            key={t}
+                            variant="outline"
+                            className="border-primary/30 bg-primary/10 font-normal text-primary"
+                          >
+                            {SYNC_RESOURCE_LABELS[t]}
+                          </Badge>
+                        ))}
                         <Button
                           variant="ghost"
-                          size="icon"
-                          className="size-8 text-destructive hover:text-destructive"
-                          title="删除目录对应"
+                          size="sm"
+                          className="h-8 gap-1 text-destructive hover:text-destructive"
+                          title="撤回整条目录对应"
                           onClick={() => onRemove(link.id)}
                         >
-                          <Trash2 className="size-4" />
+                          <Undo2 className="size-3.5" /> 撤回
                         </Button>
                       </div>
                     </CardContent>

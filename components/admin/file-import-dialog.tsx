@@ -45,6 +45,22 @@ interface DraftQuestion {
   options?: { key: string; content: string }[]
 }
 
+// 交由外部消费的导入结果：题目 + 批量授权 / 挂载信息
+export interface ImportedQuestion {
+  stem: string
+  type: QuestionType
+  difficulty: Difficulty
+  answer: string
+  analysis: string
+  options?: { key: string; content: string }[]
+}
+export interface FileImportResult {
+  questions: ImportedQuestion[]
+  level: ResourceLevel
+  ownerScope: string
+  chapterMounts: { textbookId: string; chapterId: string }[]
+}
+
 const QUESTION_TYPES = Object.keys(QUESTION_TYPE_LABELS) as QuestionType[]
 
 // 模拟读取 Excel 模板「题目数据」工作表解析出的题目（演示用）
@@ -99,6 +115,10 @@ export function FileImportDialog({
   textbookId,
   textbookName,
   chapterOptions = [],
+  onImport,
+  title = "文件导入题目",
+  description = "按固定 Excel 模板填写后上传，系统读取「题目数据」工作表，逐题确认后批量入库。",
+  importLabel,
 }: {
   open: boolean
   onOpenChange: (v: boolean) => void
@@ -106,6 +126,11 @@ export function FileImportDialog({
   textbookId?: string
   textbookName?: string
   chapterOptions?: { id: string; title: string }[]
+  // 传入时接管导入结果，不再默认写入题库
+  onImport?: (result: FileImportResult) => void
+  title?: string
+  description?: string
+  importLabel?: string
 }) {
   const { addQuestion } = useStore()
   const fileRef = useRef<HTMLInputElement>(null)
@@ -173,6 +198,25 @@ export function FileImportDialog({
     const chapterMounts =
       textbookId && mountChapterId ? [{ textbookId, chapterId: mountChapterId }] : []
 
+    // 外部接管导入结果（如精品资源题目包）
+    if (onImport) {
+      onImport({
+        questions: drafts.map((d) => ({
+          stem: d.stem.trim(),
+          type: d.type,
+          difficulty: d.difficulty,
+          answer: d.answer.trim(),
+          analysis: d.analysis.trim(),
+          options: d.type === "single" || d.type === "multiple" ? d.options : undefined,
+        })),
+        level,
+        ownerScope,
+        chapterMounts,
+      })
+      handleClose(false)
+      return
+    }
+
     drafts.forEach((d) => {
       addQuestion({
         subject: defaultSubject,
@@ -200,11 +244,9 @@ export function FileImportDialog({
         <DialogHeader className="border-b border-border px-6 py-4">
           <DialogTitle className="flex items-center gap-2">
             <FileSpreadsheet className="size-4 text-brand" />
-            文件导入题目
+            {title}
           </DialogTitle>
-          <DialogDescription>
-            按固定 Excel 模板填写后上传，系统读取「题目数据」工作表，逐题确认后批量入库。
-          </DialogDescription>
+          <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
 
         <div className="max-h-[calc(90vh-9rem)] overflow-y-auto px-6 py-5">
@@ -373,7 +415,7 @@ export function FileImportDialog({
             </Button>
             {stage === "review" && (
               <Button onClick={handleImport} disabled={drafts.length === 0}>
-                <Check className="size-4" /> 确认导入 {drafts.length} 道
+                <Check className="size-4" /> {importLabel ?? "确认导入"} {drafts.length} 道
               </Button>
             )}
           </div>

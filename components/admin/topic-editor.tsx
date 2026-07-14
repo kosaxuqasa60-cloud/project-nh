@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
@@ -8,13 +8,12 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
+  FileSpreadsheet,
   FileText,
   GripVertical,
   ImageIcon,
-  Layers,
   Plus,
   Trash2,
-  Type,
   Upload,
   Video,
   X,
@@ -34,18 +33,17 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { OrgScopePicker } from "@/components/admin/org-scope-picker"
+import { FileImportDialog, type FileImportResult } from "@/components/admin/file-import-dialog"
 import {
   ORG_TREE,
   QUESTION_TYPE_LABELS,
-  topicQuestionCount,
-  topicVideoCount,
+  premiumQuestionCount,
+  premiumVideoCount,
+  type PremiumOption,
+  type PremiumQuestion,
+  type PremiumVideo,
   type QuestionType,
   type ResourceLevel,
-  type TopicItem,
-  type TopicOption,
-  type TopicQuestionItem,
-  type TopicSection,
-  type TopicTextItem,
 } from "@/lib/types"
 
 let _uid = 0
@@ -54,7 +52,7 @@ const uid = (p: string) => `${p}-${Date.now().toString(36)}-${_uid++}`
 // 题型是否为选择题（用选项编辑器）
 const isChoice = (t: QuestionType) => t === "single" || t === "multiple"
 
-// 由归属名称反查级联 id（编辑已有专题时回填 OrgScopePicker）
+// 由归属名称反查级联 id（编辑已有资源时回填 OrgScopePicker）
 function findScopeIds(level: ResourceLevel, ownerScope?: string) {
   let cityId = ""
   let districtId = ""
@@ -74,7 +72,7 @@ function findScopeIds(level: ResourceLevel, ownerScope?: string) {
 
 export function TopicEditor({ id }: { id: string }) {
   const router = useRouter()
-  const { premiums, createTopic, updateTopic } = useStore()
+  const { premiums, textbooks, chapters, createPremium, updatePremium } = useStore()
   const isNew = id === "new"
   const existing = isNew ? undefined : premiums.find((p) => p.id === id)
 
@@ -89,8 +87,25 @@ export function TopicEditor({ id }: { id: string }) {
   const [schoolId, setSchoolId] = useState(initIds.schoolId)
   const [ownerScope, setOwnerScope] = useState(existing?.ownerScope ?? "")
   const [coverImage, setCoverImage] = useState(existing?.coverImage ?? "")
-  // —— 板块 ——
-  const [sections, setSections] = useState<TopicSection[]>(existing?.sections ?? [])
+
+  // —— 教材章节挂载（可选，单个）——
+  const initMount = existing?.chapterMounts?.[0]
+  const [mountTextbookId, setMountTextbookId] = useState(initMount?.textbookId ?? "")
+  const [mountChapterId, setMountChapterId] = useState(initMount?.chapterId ?? "")
+
+  // —— 题目列表（扁平）——
+  const [items, setItems] = useState<PremiumQuestion[]>(existing?.items ?? [])
+  const [importOpen, setImportOpen] = useState(false)
+
+  const mountLeafChapters = useMemo(
+    () =>
+      chapters
+        .filter(
+          (c) => c.textbookId === mountTextbookId && !chapters.some((x) => x.parentId === c.id),
+        )
+        .map((c) => ({ id: c.id, title: c.title })),
+    [chapters, mountTextbookId],
+  )
 
   if (!isNew && !existing) {
     return (
@@ -98,20 +113,32 @@ export function TopicEditor({ id }: { id: string }) {
         <Link href="/resources/premium" className={cn(buttonVariants({ variant: "outline", size: "sm" }), "gap-1.5")}>
           <ArrowLeft className="size-4" /> 返回精品资源
         </Link>
-        <p className="text-sm text-muted-foreground">未找到该专题，可能已被删除。</p>
+        <p className="text-sm text-muted-foreground">未找到该精品资源，可能已被删除。</p>
       </div>
     )
   }
 
-  // —— 板块操作 ——
-  const patchSection = (sid: string, patch: Partial<TopicSection>) =>
-    setSections((prev) => prev.map((s) => (s.id === sid ? { ...s, ...patch } : s)))
-  const addSection = () =>
-    setSections((prev) => [...prev, { id: uid("sec"), title: "新板块", items: [] }])
-  const removeSection = (sid: string) => setSections((prev) => prev.filter((s) => s.id !== sid))
-  const moveSection = (sid: string, dir: "up" | "down") =>
-    setSections((prev) => {
-      const i = prev.findIndex((s) => s.id === sid)
+  // —— 题目操作 ——
+  const addQuestion = () =>
+    setItems((prev) => [
+      ...prev,
+      {
+        id: uid("q"),
+        qType: "single",
+        label: String(prev.length + 1),
+        stem: "",
+        options: [
+          { id: uid("o"), text: "", correct: true },
+          { id: uid("o"), text: "", correct: false },
+        ],
+      },
+    ])
+  const patchQuestion = (qid: string, patch: Partial<PremiumQuestion>) =>
+    setItems((prev) => prev.map((q) => (q.id === qid ? { ...q, ...patch } : q)))
+  const removeQuestion = (qid: string) => setItems((prev) => prev.filter((q) => q.id !== qid))
+  const moveQuestion = (qid: string, dir: "up" | "down") =>
+    setItems((prev) => {
+      const i = prev.findIndex((q) => q.id === qid)
       const j = dir === "up" ? i - 1 : i + 1
       if (i < 0 || j < 0 || j >= prev.length) return prev
       const next = [...prev]
@@ -119,83 +146,56 @@ export function TopicEditor({ id }: { id: string }) {
       return next
     })
 
-  // —— 条目操作 ——
-  const addItem = (sid: string, type: TopicItem["type"]) =>
-    setSections((prev) =>
-      prev.map((s) => {
-        if (s.id !== sid) return s
-        const item: TopicItem =
-          type === "text"
-            ? { id: uid("it"), type: "text", content: "" }
-            : {
-                id: uid("it"),
-                type: "question",
-                qType: "single",
-                label: "",
-                stem: "",
-                options: [
-                  { id: uid("o"), text: "", correct: true },
-                  { id: uid("o"), text: "", correct: false },
-                ],
-              }
-        return { ...s, items: [...s.items, item] }
-      }),
-    )
-  const patchItem = (sid: string, iid: string, patch: Partial<TopicTextItem> & Partial<TopicQuestionItem>) =>
-    setSections((prev) =>
-      prev.map((s) =>
-        s.id !== sid
-          ? s
-          : { ...s, items: s.items.map((it) => (it.id === iid ? ({ ...it, ...patch } as TopicItem) : it)) },
-      ),
-    )
-  const removeItem = (sid: string, iid: string) =>
-    setSections((prev) =>
-      prev.map((s) => (s.id !== sid ? s : { ...s, items: s.items.filter((it) => it.id !== iid) })),
-    )
-  const moveItem = (sid: string, iid: string, dir: "up" | "down") =>
-    setSections((prev) =>
-      prev.map((s) => {
-        if (s.id !== sid) return s
-        const i = s.items.findIndex((it) => it.id === iid)
-        const j = dir === "up" ? i - 1 : i + 1
-        if (i < 0 || j < 0 || j >= s.items.length) return s
-        const items = [...s.items]
-        ;[items[i], items[j]] = [items[j], items[i]]
-        return { ...s, items }
-      }),
-    )
+  function handleImport(result: FileImportResult) {
+    const imported: PremiumQuestion[] = result.questions.map((q, i) => ({
+      id: uid("q"),
+      qType: q.type,
+      label: String(items.length + i + 1),
+      stem: q.stem,
+      options: q.options?.map((o) => ({ id: uid("o"), text: o.content, correct: false })),
+      answer: q.answer || undefined,
+      analysis: q.analysis || undefined,
+    }))
+    setItems((prev) => [...prev, ...imported])
+    toast.success(`已导入 ${imported.length} 道题目`)
+  }
 
   function save() {
     if (!title.trim()) {
-      toast.error("请填写专题标题")
+      toast.error("请填写标题")
       return
     }
     if (level !== "city" && !ownerScope) {
       toast.error("请选择完整的授权归属")
       return
     }
+    const chapterMounts =
+      mountTextbookId && mountChapterId
+        ? [{ textbookId: mountTextbookId, chapterId: mountChapterId }]
+        : []
     const payload = {
       title: title.trim(),
       subject,
       description: description.trim() || undefined,
       level,
       ownerScope: ownerScope || undefined,
-      sections,
+      items,
+      knowledgePointIds: existing?.knowledgePointIds ?? [],
+      chapterMounts,
       coverImage: coverImage || undefined,
     }
     if (isNew) {
-      const newId = createTopic(payload)
-      toast.success("专题已创建")
+      const newId = createPremium(payload)
+      toast.success("精品资源已创建")
       router.replace(`/resources/premium/topics/${newId}`)
     } else {
-      updateTopic(id, payload)
-      toast.success("专题已保存")
+      updatePremium(id, payload)
+      toast.success("精品资源已保存")
     }
   }
 
-  const qCount = topicQuestionCount({ sections })
-  const vCount = topicVideoCount({ sections })
+  const qCount = premiumQuestionCount({ items })
+  const vCount = premiumVideoCount({ items })
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 pb-16">
@@ -209,22 +209,14 @@ export function TopicEditor({ id }: { id: string }) {
         </Link>
         <div className="min-w-0 flex-1">
           <h1 className="truncate text-lg font-semibold text-foreground">
-            {isNew ? "新建专题" : title || "编辑专题"}
+            {isNew ? "新建精品资源" : title || "编辑精品资源"}
           </h1>
           <p className="text-xs text-muted-foreground">
-            {sections.length} 板块 · {qCount} 题 · {vCount} 视频
+            {qCount} 题 · {vCount} 视频
           </p>
         </div>
-        {!isNew && (
-          <Link
-            href={`/resources/premium/topics/${id}/preview`}
-            className={cn(buttonVariants({ variant: "outline" }), "gap-1.5")}
-          >
-            预览与下发
-          </Link>
-        )}
         <Button onClick={save} className="gap-1.5">
-          保存专题
+          保存
         </Button>
       </div>
 
@@ -232,8 +224,8 @@ export function TopicEditor({ id }: { id: string }) {
       <section className="space-y-4 rounded-xl border border-border bg-card p-5">
         <h2 className="text-sm font-semibold text-foreground">基本信息</h2>
         <div className="grid gap-4 sm:grid-cols-[1fr_160px]">
-          <Field label="专题标题">
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="如：专题十 · 比和比例应用" />
+          <Field label="标题">
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="如：有理数单元精品卷" />
           </Field>
           <Field label="学科">
             <Select value={subject} onValueChange={(v) => setSubject(v ?? "数学")} items={Object.fromEntries(SUBJECTS.map((s) => [s, s]))}>
@@ -246,11 +238,11 @@ export function TopicEditor({ id }: { id: string }) {
             </Select>
           </Field>
         </div>
-        <Field label="专题简介">
+        <Field label="简介">
           <Textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="一句话描述这个专题的内容与编排"
+            placeholder="一句话描述这份精品资源的内容"
             rows={2}
           />
         </Field>
@@ -269,36 +261,94 @@ export function TopicEditor({ id }: { id: string }) {
             }}
           />
         </Field>
-        <Field label="专题封面图">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="挂载教材（可选）">
+            <Select
+              value={mountTextbookId || "none"}
+              onValueChange={(v) => {
+                setMountTextbookId(v === "none" ? "" : (v ?? ""))
+                setMountChapterId("")
+              }}
+              items={{ none: "不挂载", ...Object.fromEntries(textbooks.map((t) => [t.id, t.name])) }}
+            >
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">不挂载</SelectItem>
+                {textbooks.map((t) => (
+                  <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field label="挂载章节">
+            <Select
+              value={mountChapterId || "none"}
+              onValueChange={(v) => setMountChapterId(v === "none" ? "" : (v ?? ""))}
+              items={{ none: "不挂载", ...Object.fromEntries(mountLeafChapters.map((c) => [c.id, c.title])) }}
+              disabled={!mountTextbookId}
+            >
+              <SelectTrigger><SelectValue placeholder={mountTextbookId ? "选择章节" : "请先选教材"} /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">不挂载</SelectItem>
+                {mountLeafChapters.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>{c.title}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+        </div>
+        <Field label="封面图">
           <CoverUploader value={coverImage} onChange={setCoverImage} />
         </Field>
       </section>
 
-      {/* 板块 */}
-      <div className="space-y-4">
-        {sections.map((sec, si) => (
-          <SectionCard
-            key={sec.id}
-            section={sec}
-            index={si}
-            total={sections.length}
-            onPatch={(patch) => patchSection(sec.id, patch)}
-            onRemove={() => removeSection(sec.id)}
-            onMove={(dir) => moveSection(sec.id, dir)}
-            onAddItem={(type) => addItem(sec.id, type)}
-            onPatchItem={(iid, patch) => patchItem(sec.id, iid, patch)}
-            onRemoveItem={(iid) => removeItem(sec.id, iid)}
-            onMoveItem={(iid, dir) => moveItem(sec.id, iid, dir)}
-          />
-        ))}
+      {/* 题目列表 */}
+      <section className="space-y-4 rounded-xl border border-border bg-card p-5">
+        <div className="flex items-center gap-2">
+          <FileText className="size-4 text-brand" />
+          <h2 className="text-sm font-semibold text-foreground">题目（{items.length}）</h2>
+          <Button variant="outline" size="sm" className="ml-auto gap-1" onClick={() => setImportOpen(true)}>
+            <FileSpreadsheet className="size-3.5" /> 文件导入
+          </Button>
+        </div>
+
+        {items.length === 0 && (
+          <p className="rounded-lg border border-dashed border-border py-8 text-center text-xs text-muted-foreground">
+            暂无题目，点击下方「添加题目」或「文件导入」批量导入。
+          </p>
+        )}
+
+        <div className="space-y-3">
+          {items.map((q, i) => (
+            <QuestionRow
+              key={q.id}
+              q={q}
+              index={i}
+              total={items.length}
+              onPatch={(patch) => patchQuestion(q.id, patch)}
+              onRemove={() => removeQuestion(q.id)}
+              onMove={(dir) => moveQuestion(q.id, dir)}
+            />
+          ))}
+        </div>
 
         <button
-          onClick={addSection}
+          onClick={addQuestion}
           className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border py-4 text-sm font-medium text-muted-foreground transition hover:border-brand/50 hover:text-brand"
         >
-          <Plus className="size-4" /> 添加板块
+          <Plus className="size-4" /> 添加题目
         </button>
-      </div>
+      </section>
+
+      <FileImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        defaultSubject={subject}
+        onImport={handleImport}
+        title="导入题目到该资源"
+        description="上传固定 Excel 模板，逐题确认后追加到当前精品资源的题目列表。"
+        importLabel="追加导入"
+      />
     </div>
   )
 }
@@ -333,7 +383,7 @@ function CoverUploader({ value, onChange }: { value: string; onChange: (v: strin
       {value ? (
         <div className="relative size-16 overflow-hidden rounded-lg border border-border">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={value || "/placeholder.svg"} alt="专题封面" className="size-full object-cover" />
+          <img src={value || "/placeholder.svg"} alt="封面" className="size-full object-cover" />
           <button
             onClick={() => onChange("")}
             className="absolute right-0.5 top-0.5 grid size-5 place-items-center rounded-full bg-background/90 text-muted-foreground hover:text-destructive"
@@ -357,143 +407,46 @@ function CoverUploader({ value, onChange }: { value: string; onChange: (v: strin
   )
 }
 
-function SectionCard({
-  section,
-  index,
-  total,
-  onPatch,
-  onRemove,
-  onMove,
-  onAddItem,
-  onPatchItem,
-  onRemoveItem,
-  onMoveItem,
-}: {
-  section: TopicSection
-  index: number
-  total: number
-  onPatch: (patch: Partial<TopicSection>) => void
-  onRemove: () => void
-  onMove: (dir: "up" | "down") => void
-  onAddItem: (type: TopicItem["type"]) => void
-  onPatchItem: (iid: string, patch: Partial<TopicTextItem> & Partial<TopicQuestionItem>) => void
-  onRemoveItem: (iid: string) => void
-  onMoveItem: (iid: string, dir: "up" | "down") => void
-}) {
-  return (
-    <section className="rounded-xl border border-border bg-card">
-      {/* 板块头 */}
-      <div className="flex items-center gap-2 border-b border-border px-4 py-3">
-        <Layers className="size-4 shrink-0 text-brand" />
-        <Input
-          value={section.title}
-          onChange={(e) => onPatch({ title: e.target.value })}
-          placeholder="板块名称，如 自我检测"
-          className="h-8 max-w-xs border-transparent bg-transparent px-1 text-sm font-semibold focus-visible:border-input focus-visible:bg-background"
-        />
-        <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
-          {section.items.length} 条
-        </span>
-        <div className="ml-auto flex items-center gap-0.5">
-          <IconBtn label="上移" disabled={index === 0} onClick={() => onMove("up")}>
-            <ChevronUp className="size-4" />
-          </IconBtn>
-          <IconBtn label="下移" disabled={index === total - 1} onClick={() => onMove("down")}>
-            <ChevronDown className="size-4" />
-          </IconBtn>
-          <IconBtn label="删除板块" danger onClick={onRemove}>
-            <Trash2 className="size-4" />
-          </IconBtn>
-        </div>
-      </div>
-
-      {/* 条目列表 */}
-      <div className="space-y-3 p-4">
-        {section.items.length === 0 && (
-          <p className="py-3 text-center text-xs text-muted-foreground">暂无条目，在下方添加文本块或题目</p>
-        )}
-        {section.items.map((it, ii) => (
-          <ItemRow
-            key={it.id}
-            item={it}
-            index={ii}
-            total={section.items.length}
-            onPatch={(patch) => onPatchItem(it.id, patch)}
-            onRemove={() => onRemoveItem(it.id)}
-            onMove={(dir) => onMoveItem(it.id, dir)}
-          />
-        ))}
-
-        <div className="flex gap-2 pt-1">
-          <button
-            onClick={() => onAddItem("question")}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground transition hover:bg-muted"
-          >
-            <FileText className="size-3.5 text-brand" /> 添加题目
-          </button>
-          <button
-            onClick={() => onAddItem("text")}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground transition hover:bg-muted"
-          >
-            <Type className="size-3.5 text-brand" /> 添加文本块
-          </button>
-        </div>
-      </div>
-    </section>
-  )
-}
-
-function ItemRow({
-  item,
+function QuestionRow({
+  q,
   index,
   total,
   onPatch,
   onRemove,
   onMove,
 }: {
-  item: TopicItem
+  q: PremiumQuestion
   index: number
   total: number
-  onPatch: (patch: Partial<TopicTextItem> & Partial<TopicQuestionItem>) => void
+  onPatch: (patch: Partial<PremiumQuestion>) => void
   onRemove: () => void
   onMove: (dir: "up" | "down") => void
 }) {
-  const isQ = item.type === "question"
-  const q = item as TopicQuestionItem
   return (
     <div className="rounded-lg border border-border bg-background p-3">
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <GripVertical className="size-3.5 text-muted-foreground" />
-        <span
-          className={cn(
-            "rounded-md px-2 py-0.5 text-[11px] font-medium",
-            isQ ? "bg-brand-soft text-brand-soft-foreground" : "bg-accent text-accent-foreground",
-          )}
-        >
-          {isQ ? "题目" : "文本块"}
+        <span className="rounded-md bg-brand-soft px-2 py-0.5 text-[11px] font-medium text-brand-soft-foreground">
+          第 {index + 1} 题
         </span>
-        {isQ && (
-          <>
-            <Input
-              value={q.label ?? ""}
-              onChange={(e) => onPatch({ label: e.target.value })}
-              placeholder="编号 如 例1 / 1"
-              className="h-7 w-24 text-xs"
-            />
-            <Select
-              value={q.qType}
-              onValueChange={(v) => onPatch({ qType: (v ?? "single") as QuestionType })}
-              items={QUESTION_TYPE_LABELS}
-            >
-              <SelectTrigger className="h-7 w-28 text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {(Object.keys(QUESTION_TYPE_LABELS) as QuestionType[]).map((t) => (
-                  <SelectItem key={t} value={t}>{QUESTION_TYPE_LABELS[t]}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </>
-        )}
+        <Input
+          value={q.label ?? ""}
+          onChange={(e) => onPatch({ label: e.target.value })}
+          placeholder="编号 如 1 / 例1"
+          className="h-7 w-24 text-xs"
+        />
+        <Select
+          value={q.qType}
+          onValueChange={(v) => onPatch({ qType: (v ?? "single") as QuestionType })}
+          items={QUESTION_TYPE_LABELS}
+        >
+          <SelectTrigger className="h-7 w-28 text-xs"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {(Object.keys(QUESTION_TYPE_LABELS) as QuestionType[]).map((t) => (
+              <SelectItem key={t} value={t}>{QUESTION_TYPE_LABELS[t]}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <div className="ml-auto flex items-center gap-0.5">
           <IconBtn label="上移" disabled={index === 0} onClick={() => onMove("up")}>
             <ChevronUp className="size-4" />
@@ -507,106 +460,86 @@ function ItemRow({
         </div>
       </div>
 
-      {item.type === "text" ? (
-        <div className="space-y-2">
-          <Input
-            value={item.title ?? ""}
-            onChange={(e) => onPatch({ title: e.target.value })}
-            placeholder="小标题（可选）"
-            className="h-8 text-sm"
-          />
+      <div className="space-y-2">
+        <LabeledMini label="题干">
           <Textarea
-            value={item.content}
-            onChange={(e) => onPatch({ content: e.target.value })}
-            placeholder="讲解正文，如补充知识、自我归纳…"
-            rows={3}
+            value={q.stem}
+            onChange={(e) => onPatch({ stem: e.target.value })}
+            placeholder="输入题干"
+            rows={2}
           />
-        </div>
-      ) : (
-        <div className="space-y-2">
-          <LabeledMini label="题干">
-            <Textarea
-              value={q.stem}
-              onChange={(e) => onPatch({ stem: e.target.value })}
-              placeholder="输入题干"
-              rows={2}
+        </LabeledMini>
+
+        {/* 按题型动态：选择题→选项编辑器；判断题→对/错；填空/解答→文本答案 */}
+        {isChoice(q.qType) ? (
+          <OptionsEditor
+            qType={q.qType}
+            options={q.options ?? []}
+            onChange={(options) => onPatch({ options })}
+          />
+        ) : q.qType === "judge" ? (
+          <LabeledMini label="正确答案">
+            <div className="flex gap-2">
+              {["对", "错"].map((v) => (
+                <button
+                  key={v}
+                  onClick={() => onPatch({ answer: v })}
+                  className={cn(
+                    "flex-1 rounded-lg border px-3 py-1.5 text-sm transition",
+                    q.answer === v
+                      ? "border-brand bg-brand-soft text-brand-soft-foreground"
+                      : "border-border text-foreground hover:bg-muted",
+                  )}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
+          </LabeledMini>
+        ) : (
+          <LabeledMini label="参考答案">
+            <Input
+              value={q.answer ?? ""}
+              onChange={(e) => onPatch({ answer: e.target.value })}
+              placeholder={q.qType === "fill" ? "填空答案" : "解答要点"}
+              className="h-8 text-sm"
             />
           </LabeledMini>
+        )}
 
-          {/* 按题型动态：选择题→选项编辑器；判断题→对/错；填空/解答→文本答案 */}
-          {isChoice(q.qType) ? (
-            <OptionsEditor
-              qType={q.qType}
-              options={q.options ?? []}
-              onChange={(options) => onPatch({ options })}
+        <LabeledMini label="解析（可选）">
+          <Textarea
+            value={q.analysis ?? ""}
+            onChange={(e) => onPatch({ analysis: e.target.value })}
+            placeholder="解题过程"
+            rows={2}
+          />
+        </LabeledMini>
+
+        {/* 视频讲解：模拟上传 */}
+        <div className="rounded-md border border-dashed border-border p-2.5">
+          <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-foreground">
+            <Video className="size-3.5 text-brand" /> 视频讲解
+          </div>
+          <div className="grid gap-2 sm:grid-cols-[120px_90px]">
+            <Input
+              value={q.video?.title ?? ""}
+              onChange={(e) => onPatch({ video: { ...q.video, title: e.target.value } })}
+              placeholder="标题 如 视频1"
+              className="h-8 text-sm"
             />
-          ) : q.qType === "judge" ? (
-            <LabeledMini label="正确答案">
-              <div className="flex gap-2">
-                {["对", "错"].map((v) => (
-                  <button
-                    key={v}
-                    onClick={() => onPatch({ answer: v })}
-                    className={cn(
-                      "flex-1 rounded-lg border px-3 py-1.5 text-sm transition",
-                      q.answer === v
-                        ? "border-brand bg-brand-soft text-brand-soft-foreground"
-                        : "border-border text-foreground hover:bg-muted",
-                    )}
-                  >
-                    {v}
-                  </button>
-                ))}
-              </div>
-            </LabeledMini>
-          ) : (
-            <LabeledMini label="参考答案">
-              <Input
-                value={q.answer ?? ""}
-                onChange={(e) => onPatch({ answer: e.target.value })}
-                placeholder={q.qType === "fill" ? "填空答案" : "解答要点"}
-                className="h-8 text-sm"
-              />
-            </LabeledMini>
-          )}
-
-          <LabeledMini label="解析（可选）">
-            <Textarea
-              value={q.analysis ?? ""}
-              onChange={(e) => onPatch({ analysis: e.target.value })}
-              placeholder="解题过程"
-              rows={2}
+            <Input
+              value={q.video?.duration ?? ""}
+              onChange={(e) => onPatch({ video: { ...q.video, duration: e.target.value } })}
+              placeholder="时长"
+              className="h-8 text-sm"
             />
-          </LabeledMini>
-
-          {/* 视频讲解：模拟上传 */}
-          <div className="rounded-md border border-dashed border-border p-2.5">
-            <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-foreground">
-              <Video className="size-3.5 text-brand" /> 视频讲解
-            </div>
-            <div className="grid gap-2 sm:grid-cols-[120px_90px]">
-              <Input
-                value={q.video?.title ?? ""}
-                onChange={(e) => onPatch({ video: { ...q.video, title: e.target.value } })}
-                placeholder="标题 如 视频1"
-                className="h-8 text-sm"
-              />
-              <Input
-                value={q.video?.duration ?? ""}
-                onChange={(e) => onPatch({ video: { ...q.video, duration: e.target.value } })}
-                placeholder="时长"
-                className="h-8 text-sm"
-              />
-            </div>
-            <div className="mt-2">
-              <VideoUploader
-                video={q.video}
-                onChange={(video) => onPatch({ video })}
-              />
-            </div>
+          </div>
+          <div className="mt-2">
+            <VideoUploader video={q.video} onChange={(video) => onPatch({ video })} />
           </div>
         </div>
-      )}
+      </div>
     </div>
   )
 }
@@ -618,8 +551,8 @@ function OptionsEditor({
   onChange,
 }: {
   qType: QuestionType
-  options: TopicOption[]
-  onChange: (opts: TopicOption[]) => void
+  options: PremiumOption[]
+  onChange: (opts: PremiumOption[]) => void
 }) {
   const setCorrect = (oid: string) => {
     if (qType === "single") {
@@ -678,8 +611,8 @@ function VideoUploader({
   video,
   onChange,
 }: {
-  video?: TopicQuestionItem["video"]
-  onChange: (v: TopicQuestionItem["video"]) => void
+  video?: PremiumVideo
+  onChange: (v: PremiumVideo) => void
 }) {
   const ref = useRef<HTMLInputElement>(null)
   const hasFile = !!video?.url
