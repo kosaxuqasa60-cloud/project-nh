@@ -29,7 +29,6 @@ import { useStore } from "@/lib/store"
 import {
   COGNITIVE_OPTIONS,
   LITERACY_OPTIONS,
-  PREMIUM_CATEGORY_LABELS,
   QUESTION_TYPE_LABELS,
   RESOURCE_KIND_LABELS,
   RESOURCE_LEVEL_LABELS,
@@ -42,7 +41,6 @@ import {
   type Difficulty,
   type Microlesson,
   type Premium,
-  type PremiumCategory,
   type Question,
   type QuestionType,
   type ResourceKind,
@@ -75,7 +73,6 @@ export function ResourceFormDialog({
     addAssignment,
     addMicrolesson,
     addAirClass,
-    addPremium,
     updateResource,
     saveQuestionAsNewVersion,
     knowledgePoints,
@@ -120,8 +117,6 @@ export function ResourceFormDialog({
   const [scheduledAt, setScheduledAt] = useState(e?.scheduledAt ?? "")
   const [liveUrl, setLiveUrl] = useState(e?.liveUrl ?? "")
   // 精品资源
-  const [category, setCategory] = useState<PremiumCategory>(e?.category ?? "paper")
-  const [description, setDescription] = useState(e?.description ?? "")
 
   // 题目版本：另存为新版本的确认弹窗 + 修订说明
   const [versionPromptOpen, setVersionPromptOpen] = useState(false)
@@ -205,8 +200,6 @@ export function ResourceFormDialog({
       else if (kind === "assignment") Object.assign(patch, { title: title.trim(), questionIds })
       else if (kind === "microlesson")
         Object.assign(patch, { title: title.trim(), duration, videoUrl })
-      else if (kind === "premium")
-        Object.assign(patch, { title: title.trim(), category, description, questionIds })
       else Object.assign(patch, { title: title.trim(), teacher, scheduledAt, liveUrl })
       updateResource(kind, editing.id, patch)
       toast.success(`${kindLabel}已更新`)
@@ -225,8 +218,6 @@ export function ResourceFormDialog({
         addAssignment({ ...base, title: title.trim(), questionIds })
       else if (kind === "microlesson")
         addMicrolesson({ ...base, title: title.trim(), grade: "七年级", duration: duration || "00:00", videoUrl })
-      else if (kind === "premium")
-        addPremium({ ...base, title: title.trim(), category, description, questionIds })
       else addAirClass({ ...base, title: title.trim(), teacher, scheduledAt, liveUrl })
       toast.success(`已创建${kindLabel}`, { description: "资源已入库，可在教材章节中挂载使用" })
     }
@@ -434,33 +425,6 @@ export function ResourceFormDialog({
             </div>
           )}
 
-          {kind === "premium" && (
-            <>
-              <Field label="精品分类">
-                <Select
-                  value={category}
-                  onValueChange={(v) => setCategory(v as PremiumCategory)}
-                  items={PREMIUM_CATEGORY_LABELS}
-                >
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {(Object.keys(PREMIUM_CATEGORY_LABELS) as PremiumCategory[]).map((c) => (
-                      <SelectItem key={c} value={c}>{PREMIUM_CATEGORY_LABELS[c]}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-              <Field label="简介">
-                <Textarea
-                  value={description}
-                  onChange={(ev) => setDescription(ev.target.value)}
-                  placeholder="可选：精品资源简介与适用说明"
-                  className="min-h-16"
-                />
-              </Field>
-            </>
-          )}
-
           {/* 学科 + 级别 + 归属 */}
           <div className="grid grid-cols-2 gap-4">
             <Field label="学科">
@@ -538,8 +502,8 @@ export function ResourceFormDialog({
             )}
           </Field>
 
-          {/* 作业 / 精品：从题库选题组卷 */}
-          {(kind === "assignment" || kind === "premium") && (
+          {/* 作业：从题库选题组卷 */}
+          {kind === "assignment" && (
             <Field label={`组卷选题（已选 ${questionIds.length} 道，来自${subject}题库）`}>
               <div className="max-h-52 space-y-1.5 overflow-y-auto rounded-md border border-border p-2">
                 {subjectQuestions.map((q) => {

@@ -14,7 +14,7 @@ import {
   tagItems as seedTagItems,
   textbooks as seedTextbooks,
 } from "./mock-data"
-import { DEFAULT_TAG_DIMENSIONS, PREMIUM_CATEGORY_LABELS, QUESTION_TYPE_LABELS, resolveTagOptions } from "./types"
+import { DEFAULT_TAG_DIMENSIONS, QUESTION_TYPE_LABELS, resolveTagOptions } from "./types"
 import type {
   AirClass,
   Assignment,
@@ -91,14 +91,22 @@ interface StoreValue {
   updateMicrolesson: (id: string, patch: Partial<Microlesson>) => void
   addAirClass: (a: Omit<AirClass, "id" | "updatedAt" | "chapterMounts">) => void
   addPremium: (p: Omit<Premium, "id" | "updatedAt" | "chapterMounts">) => void
-  // 专题资源（结构化题目包）：新建返回 id；更新按 id 局部覆盖
-  createTopic: (
+  // 精品资源（题目包）：新建返回 id；更新按 id 局部覆盖
+  createPremium: (
     p: Pick<
       Premium,
-      "title" | "subject" | "description" | "level" | "ownerScope" | "sections" | "coverImage"
+      | "title"
+      | "subject"
+      | "description"
+      | "level"
+      | "ownerScope"
+      | "items"
+      | "knowledgePointIds"
+      | "chapterMounts"
+      | "coverImage"
     >,
   ) => string
-  updateTopic: (id: string, patch: Partial<Premium>) => void
+  updatePremium: (id: string, patch: Partial<Premium>) => void
   // 题目版本：另存为新版本（旧版本归档保留统计，新版本成为当前生效版本，统计清零）
   saveQuestionAsNewVersion: (
     familyId: string,
@@ -364,7 +372,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             id: p.id,
             kind: "premium",
             title: p.title,
-            subtitle: PREMIUM_CATEGORY_LABELS[p.category],
+            subtitle: `${p.items.length} 题`,
             subject: p.subject,
             level: p.level,
             ownerScope: p.ownerScope,
@@ -453,21 +461,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           { ...p, id: nextId("pm"), chapterMounts: [], updatedAt: today() } as Premium,
           ...prev,
         ]),
-      createTopic: (p) => {
+      createPremium: (p) => {
         const id = nextId("pm")
         setPremiums((prev) => [
           {
             id,
             title: p.title,
             subject: p.subject,
-            category: "special",
             description: p.description,
-            questionIds: [],
-            knowledgePointIds: [],
-            chapterMounts: [],
+            items: p.items ?? [],
+            knowledgePointIds: p.knowledgePointIds ?? [],
+            chapterMounts: p.chapterMounts ?? [],
             level: p.level,
             ownerScope: p.ownerScope,
-            sections: p.sections ?? [],
             coverImage: p.coverImage,
             usedCount: 0,
             updatedAt: today(),
@@ -476,7 +482,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         ])
         return id
       },
-      updateTopic: (id, patch) =>
+      updatePremium: (id, patch) =>
         setPremiums((prev) =>
           prev.map((r) => (r.id === id ? { ...r, ...patch, updatedAt: today() } : r)),
         ),

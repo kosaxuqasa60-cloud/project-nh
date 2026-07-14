@@ -1,4 +1,3 @@
-import { PREMIUM_CATEGORY_LABELS } from "@/lib/types"
 import type {
   AirClass,
   Assignment,
@@ -92,7 +91,7 @@ export function buildRow(
       ...base,
       title: p.title,
       knowledgePointLabels: p.knowledgePointIds.map(kpLabel),
-      metaLine: `${PREMIUM_CATEGORY_LABELS[p.category]} · ${p.questionIds.length} 题`,
+      metaLine: `题目包 · ${p.items.length} 题`,
     }
   }
   const ac = raw as AirClass

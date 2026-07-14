@@ -44,8 +44,7 @@ import {
 const NONE = "__none__"
 
 export default function SyncMappingPage() {
-  const { textbooks, chapters, syncLinks, addSyncLink, updateSyncLinkTypes, removeSyncLink } =
-    useStore()
+  const { textbooks, chapters, syncLinks, addSyncLink, removeSyncLink } = useStore()
 
   // null = 主教材列表视图；否则为某主教材的详情视图（fromTextbookId）
   const [activeSource, setActiveSource] = useState<string | null>(null)

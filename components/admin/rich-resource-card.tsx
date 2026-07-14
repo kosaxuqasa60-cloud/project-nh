@@ -21,7 +21,6 @@ import { MathText } from "@/components/admin/math-text"
 import { useStore } from "@/lib/store"
 import {
   difficultyTier,
-  PREMIUM_CATEGORY_LABELS,
   QUESTION_TYPE_LABELS,
   type Assignment,
   type AirClass,
@@ -290,9 +289,7 @@ export function PremiumCard({
       <div className="min-w-0 flex-1">
         <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
           <LevelBadge level={data.level} ownerScope={data.ownerScope} />
-          <Pill className="bg-warn/15 text-warn-foreground">
-            {PREMIUM_CATEGORY_LABELS[data.category]}
-          </Pill>
+          <Pill className="bg-warn/15 text-warn-foreground">题目包</Pill>
           <span className="truncate text-sm font-medium text-foreground">{data.title}</span>
         </div>
         {data.description && (
@@ -301,7 +298,7 @@ export function PremiumCard({
         <div className="flex flex-wrap items-center gap-1.5">
           <Pill className="bg-muted text-muted-foreground">
             <Layers className="size-3" />
-            {data.questionIds.length} 题
+            {data.items.length} 题
           </Pill>
           {data.usedCount != null && (
             <span className="text-[11px] text-muted-foreground">使用 {data.usedCount} 次</span>
